@@ -1,0 +1,1244 @@
+{
+  "Auto glass tool - pry level set|TW": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - urethane scraper blades|TW": {
+    "hs_code": "8205.59.5505",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - clip removal tool|TW": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - scraper tool|TW": {
+    "hs_code": "8205.59.5505",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - wiper arm removal tool|TW": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - fiber line based removal system|CA": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Synthetic polyethylene nylon braided line|TW": {
+    "hs_code": "5607.49.1500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.07,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - extended arm|CA": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - positioning assistant|CA": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - replacement bit|TW": {
+    "hs_code": "8207.90.6000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.043,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - replacement plastic tool case|CN": {
+    "hs_code": "4202.99.9000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.2,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement anchor cup with rubber pad|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement angle driver accessory|TW": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - dash protector|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - fiber line based removal tool|CA": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - install stick|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - cutting line holder pins|CN": {
+    "hs_code": "8205.59.5505",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - pick tool|TW": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - handling cup|CA": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - replacement anchor cup hardware|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement handle base|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement removal cup hardware|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement anchor cup plastic housing|CN": {
+    "hs_code": "3926.90.3000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.042,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Replacement suction pad made from vulcanized rubber for auto glass tool|CN": {
+    "hs_code": "4016.93.1050",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.025,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement ball bearings|CN": {
+    "hs_code": "8482.10.5044",
+    "postal": {
+      "rates": {
+        "general_rate": 0
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.09,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement guiding bolt|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement bushing|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement shaft|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement plastic knob|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - plunger lubricant|US": {
+    "hs_code": "3403.99.0000",
+    "postal": {
+      "rates": {
+        "duty": 0
+      }
+    },
+    "commercial": {
+      "rates": {
+        "duty": 0
+      }
+    }
+  },
+  "Auto glass tool - replacement nylon roller|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement body components|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement suction pump|CN": {
+    "hs_code": "8414.10.0000",
+    "postal": {
+      "rates": {
+        "general_rate": 0
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.025,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement spring pins|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - hand crank|CA": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - install system|CA": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - double hook|CN": {
+    "hs_code": "8205.59.3010",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement spindle/shaft|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement metal roller|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement guide hardware|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement spring set|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - molding protector sheets|CN": {
+    "hs_code": "3926.90.3000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.042,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement o-ring|CN": {
+    "hs_code": "4016.93.1010",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.025,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - sharpening stone|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - sharpening pen|CN": {
+    "hs_code": "8205.59.5505",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - urethane scraper kit|TW": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - scraper kit|CA": {
+    "hs_code": "8205.59.5505",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - fiber line dispenser|CA": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - quarter glass removal system|CA": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - removal dock base|CN": {
+    "hs_code": "8205.59.3080",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement adhesive pads|CN": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement bolt|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement collet and sleave|TW": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - urethane knife set|CA": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - urethane knife|CA": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - urethane knife blades|US": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "duty": 0
+      }
+    },
+    "commercial": {
+      "rates": {
+        "duty": 0
+      }
+    }
+  },
+  "Auto glass tool - rearview removal tool|TW": {
+    "hs_code": "8205.59.3010",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - urethane tap knife|TW": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - rubber mallet|CN": {
+    "hs_code": "8205.20.3000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.062,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement rubber pad filter|CN": {
+    "hs_code": "4016.93.1050",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.025,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement screws|CN": {
+    "hs_code": "7318.15.6070",
+    "postal": {
+      "rates": {
+        "general_rate": 0
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.062,
+        "2018_section_301_tariffs": 0.25,
+        "us_steelaluminumcopper_tariffs": 0.5
+      }
+    }
+  },
+  "Auto glass tool - line threader|TW": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - replacement anchor cup with rubber pad|CA": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.35
+      }
+    }
+  },
+  "Auto glass tool - replacement washer|CN": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement protective pad cover|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement plastic handle|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - extended stainless steel arm|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - wiper arm removal tool|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - trim removal tool|TW": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - replacement bit adapter|CN": {
+    "hs_code": "8207.90.6000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.043,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - pump plunger|CN": {
+    "hs_code": "8205.59.4500",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement deflection rods|CN": {
+    "hs_code": "8205.59.5560",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.053,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement electronic pump|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  },
+  "Auto glass tool - replacement bit adapter|TW": {
+    "hs_code": "8207.90.6000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0.043,
+        "aug_1_us_reciprocal_tariffs": 0.2
+      }
+    }
+  },
+  "Auto glass tool - extended push knife|CN": {
+    "hs_code": "8205.59.2000",
+    "postal": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1
+      }
+    },
+    "commercial": {
+      "rates": {
+        "general_rate": 0,
+        "feb_25_uscn_tariffs": 0.2,
+        "reduced_apr_uscn_additional_duty": 0.1,
+        "2018_section_301_tariffs": 0.25
+      }
+    }
+  }
+}
