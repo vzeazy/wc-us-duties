@@ -25,6 +25,7 @@ require_once WRD_US_DUTY_DIR . 'includes/class-wrd-duty-engine.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-admin.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-settings.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-frontend.php';
+require_once WRD_US_DUTY_DIR . 'includes/template-tags.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-us-duty-plugin.php';
 
 register_activation_hook(__FILE__, ['WRD_US_Duty_Plugin', 'activate']);
