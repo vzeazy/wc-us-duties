@@ -23,11 +23,11 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
 
     public function get_columns() {
         return [
-            'title' => __('Title', 'wrd-us-duty'),
-            'type' => __('Type', 'wrd-us-duty'),
-            'sku' => __('SKU', 'wrd-us-duty'),
-            'origin' => __('Origin', 'wrd-us-duty'),
-            'desc' => __('Description', 'wrd-us-duty'),
+            'title' => __('Title', 'woocommerce-us-duties'),
+            'type' => __('Type', 'woocommerce-us-duties'),
+            'sku' => __('SKU', 'woocommerce-us-duties'),
+            'origin' => __('Origin', 'woocommerce-us-duties'),
+            'desc' => __('Description', 'woocommerce-us-duties'),
         ];
     }
 
@@ -115,4 +115,3 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
         ]);
     }
 }
-

@@ -47,13 +47,18 @@ add_action('before_woocommerce_init', function () {
     }
 });
 
+// i18n
+add_action('init', function(){
+    load_plugin_textdomain('woocommerce-us-duties', false, dirname(plugin_basename(__FILE__)) . '/languages');
+});
+
 // Nice admin shortcuts on the Plugins list row
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
     if (!current_user_can('manage_woocommerce')) { return $links; }
-    $settings = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=settings')), esc_html__('Settings', 'wrd-us-duty'));
-    $profiles = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=profiles')), esc_html__('Customs & Duties', 'wrd-us-duty'));
-    $import = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import')), esc_html__('Import/Export', 'wrd-us-duty'));
-    $tools = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=tools')), esc_html__('Tools', 'wrd-us-duty'));
+    $settings = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=settings')), esc_html__('Settings', 'woocommerce-us-duties'));
+    $profiles = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=profiles')), esc_html__('Customs & Duties', 'woocommerce-us-duties'));
+    $import = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import')), esc_html__('Import/Export', 'woocommerce-us-duties'));
+    $tools = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=tools')), esc_html__('Tools', 'woocommerce-us-duties'));
     array_unshift($links, $settings, $profiles, $import, $tools);
     return $links;
 });
@@ -61,9 +66,9 @@ add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links)
 add_filter('plugin_row_meta', function ($links, $file) {
     if ($file !== plugin_basename(__FILE__)) { return $links; }
     if (!current_user_can('manage_woocommerce')) { return $links; }
-    $export = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import&action=export')), esc_html__('Export Profiles CSV', 'wrd-us-duty'));
-    $reindex = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=tools')), esc_html__('Reindex Products', 'wrd-us-duty'));
-    $docs = '<a href="https://" target="_blank" rel="noopener">' . esc_html__('Docs', 'wrd-us-duty') . '</a>';
+    $export = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import&action=export')), esc_html__('Export Profiles CSV', 'woocommerce-us-duties'));
+    $reindex = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=tools')), esc_html__('Reindex Products', 'woocommerce-us-duties'));
+    $docs = '<a href="https://" target="_blank" rel="noopener">' . esc_html__('Docs', 'woocommerce-us-duties') . '</a>';
     // We don’t have a hosted docs URL; keep placeholder or remove if undesired
     $links[] = $export;
     $links[] = $reindex;

@@ -21,13 +21,13 @@ class WRD_Profiles_Table extends WP_List_Table {
     public function get_columns() {
         return [
             'cb' => '<input type="checkbox" />',
-            'description_raw' => __('Description', 'wrd-us-duty'),
-            'country_code' => __('Country', 'wrd-us-duty'),
-            'hs_code' => __('HS', 'wrd-us-duty'),
-            'products' => __('Products', 'wrd-us-duty'),
-            'effective_from' => __('From', 'wrd-us-duty'),
-            'effective_to' => __('To', 'wrd-us-duty'),
-            'notes' => __('Notes', 'wrd-us-duty'),
+            'description_raw' => __('Description', 'woocommerce-us-duties'),
+            'country_code' => __('Country', 'woocommerce-us-duties'),
+            'hs_code' => __('HS', 'woocommerce-us-duties'),
+            'products' => __('Products', 'woocommerce-us-duties'),
+            'effective_from' => __('From', 'woocommerce-us-duties'),
+            'effective_to' => __('To', 'woocommerce-us-duties'),
+            'notes' => __('Notes', 'woocommerce-us-duties'),
         ];
     }
 
@@ -73,7 +73,7 @@ class WRD_Profiles_Table extends WP_List_Table {
         $title = esc_html($item['description_raw']);
         $cc = esc_html($item['country_code']);
         $actions = [
-            'edit' => sprintf('<a href="%s">%s</a>', esc_url($editUrl), __('Edit', 'wrd-us-duty')),
+            'edit' => sprintf('<a href="%s">%s</a>', esc_url($editUrl), __('Edit', 'woocommerce-us-duties')),
         ];
         return sprintf('<strong><a href="%s">%s</a></strong> <span class="description">| %s</span> %s', esc_url($editUrl), $title, $cc, $this->row_actions($actions));
     }
@@ -96,7 +96,7 @@ class WRD_Profiles_Table extends WP_List_Table {
 
     public function get_bulk_actions() {
         return [
-            'delete' => __('Delete', 'wrd-us-duty'),
+            'delete' => __('Delete', 'woocommerce-us-duties'),
         ];
     }
 
