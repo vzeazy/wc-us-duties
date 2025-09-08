@@ -336,18 +336,92 @@ class WRD_Admin {
 
     public function render_product_customs_column($column, $post_id) {
         if ($column !== 'wrd_customs') { return; }
+        // Try product-level first
         $desc = get_post_meta($post_id, '_customs_description', true);
-        $origin = strtoupper((string)get_post_meta($post_id, '_country_of_origin', true));
-        if (!$desc || !$origin) {
+        $origin = strtoupper((string) get_post_meta($post_id, '_country_of_origin', true));
+
+        // Helper to echo statuses consistently
+        $echo_missing = function() {
             echo '<span style="color:#a00;">' . esc_html__('Missing', 'wrd-us-duty') . '</span>';
+        };
+        $echo_rate = function($ratePct, $channel) {
+            // Format like 5.3% (commercial)
+            $rate = is_numeric($ratePct) ? round((float)$ratePct, 1) : 0.0;
+            // strip trailing .0
+            $rate_str = (abs($rate - (int)$rate) < 0.05) ? (string)((int)$rate) : number_format($rate, 1);
+            $channel = $channel ? strtolower((string)$channel) : '';
+            $suffix = $channel !== '' ? ' (' . esc_html($channel) . ')' : '';
+            echo '<span style="color:#008a00;">' . esc_html($rate_str . '%') . $suffix . '</span>';
+        };
+        $echo_no_profile = function() {
+            echo '<span style="color:#d98300;">' . esc_html__('No profile', 'wrd-us-duty') . '</span>';
+        };
+
+        // Simple per-request cache for profiles by normalized key
+        static $profile_cache = [];
+        $get_profile = function($raw_desc, $cc) use (&$profile_cache) {
+            $norm = WRD_DB::normalize_description((string)$raw_desc);
+            $ccU = strtoupper((string)$cc);
+            $key = $norm . '|' . $ccU;
+            if (!array_key_exists($key, $profile_cache)) {
+                $profile_cache[$key] = WRD_DB::get_profile((string)$raw_desc, $ccU);
+            }
+            return $profile_cache[$key];
+        };
+
+        $product_match = null; // null = no data, true/false = matched/not
+        if ($desc && $origin) {
+            $product_match = (bool) $get_profile($desc, $origin);
+        }
+
+        // Check variations (for variable products) regardless, to surface a match if any variant is valid
+        $post_type = get_post_type($post_id);
+        if ($post_type === 'product') {
+            $children = get_children([
+                'post_parent' => (int) $post_id,
+                'post_type' => 'product_variation',
+                'post_status' => 'any',
+                'fields' => 'ids',
+            ]);
+            if ($children) {
+                $found_any = false; $any_matched = false; $cc_seen = '';
+                foreach ($children as $vid) {
+                    $vdesc = get_post_meta($vid, '_customs_description', true);
+                    $vorigin = strtoupper((string) get_post_meta($vid, '_country_of_origin', true));
+                    // Inherit from parent if missing
+                    if ($vdesc === '' && $desc !== '') { $vdesc = $desc; }
+                    if ($vorigin === '' && $origin !== '') { $vorigin = $origin; }
+                    if ($vdesc && $vorigin) {
+                        $found_any = true; $cc_seen = $cc_seen ?: $vorigin;
+                        $prof = $get_profile($vdesc, $vorigin);
+                        if ($prof) { $any_matched = true; break; }
+                    }
+                }
+                if ($any_matched) {
+                    $cc_out = $cc_seen ?: $origin;
+                    $prof = $get_profile($vdesc, $cc_out);
+                    $channel = WRD_Duty_Engine::decide_channel($cc_out);
+                    $ratePct = is_array($prof) ? WRD_Duty_Engine::compute_rate_percent((array)$prof['us_duty_json'], $channel) : 0.0;
+                    $echo_rate($ratePct, $channel);
+                    return;
+                }
+                // If we didn't find a variant match but we had variant data, remember that
+                if ($found_any) {
+                    // If product-level is matched, we'll prefer matched below; otherwise show no profile
+                    if ($product_match === null) { $echo_no_profile(); return; }
+                }
+            }
+        }
+        // Prefer product-level if it exists
+        if ($product_match === true) {
+            $prof = $get_profile($desc, $origin);
+            $channel = WRD_Duty_Engine::decide_channel($origin);
+            $ratePct = is_array($prof) ? WRD_Duty_Engine::compute_rate_percent((array)$prof['us_duty_json'], $channel) : 0.0;
+            $echo_rate($ratePct, $channel);
             return;
         }
-        $profile = WRD_DB::get_profile($desc, $origin);
-        if ($profile) {
-            echo '<span style="color:#008a00;">' . esc_html(sprintf(__('Matched (%s)', 'wrd-us-duty'), strtoupper($origin))) . '</span>';
-        } else {
-            echo '<span style="color:#d98300;">' . esc_html__('No profile', 'wrd-us-duty') . '</span>';
-        }
+        if ($product_match === false) { $echo_no_profile(); return; }
+        $echo_missing();
     }
 
     // --- Quick/Bulk edit fields and handler ---
@@ -749,7 +823,12 @@ class WRD_Admin {
             $product->update_meta_data('_customs_description', wp_kses_post($desc));
             $product->update_meta_data('_country_of_origin', $cc);
             $product->save();
-            $this->update_normalized_meta_for_product((int)$product->get_id());
+            // Update normalized meta correctly for product vs variation
+            if ($product->is_type('variation')) {
+                $this->update_normalized_meta_for_variation((int) $product->get_id());
+            } else {
+                $this->update_normalized_meta_for_product((int) $product->get_id());
+            }
             $updated++;
         }
         fclose($fh);
