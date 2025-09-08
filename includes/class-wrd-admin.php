@@ -990,12 +990,15 @@ class WRD_Admin {
 
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-impacted-products-table.php';
         $table = new WRD_Impacted_Products_Table($descNorm, $cc);
+        // Handle bulk actions only on POST to avoid conflicting with page query arg 'action=impacted'
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $table->process_bulk_action();
+        }
         $table->prepare_items();
         echo '<h2>' . esc_html(sprintf(__('Impacted Products — %s (%s)', 'wrd-us-duty'), $descNorm, $cc)) . '</h2>';
-        echo '<form method="get">';
+        echo '<form method="post">';
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
-        echo '<input type="hidden" name="action" value="impacted" />';
         echo '<input type="hidden" name="desc_norm" value="' . esc_attr($descNorm) . '" />';
         echo '<input type="hidden" name="cc" value="' . esc_attr($cc) . '" />';
         $table->search_box(__('Search products', 'wrd-us-duty'), 'wrd_impacted');
