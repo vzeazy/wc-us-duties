@@ -15,7 +15,7 @@
  */
 
 // Set to true for dry-run (no actual changes)
-$dry_run = false;
+$dry_run = true;
 
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
 
