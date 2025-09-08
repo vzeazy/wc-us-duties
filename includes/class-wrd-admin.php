@@ -210,17 +210,47 @@ class WRD_Admin {
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
         $table->prepare_items();
-        // Bulk set dates controls (used when choosing the "Set Effective Dates…" bulk action)
-        echo '<div class="alignleft actions" style="margin:6px 0;">';
-        echo '<label style="margin-right:8px;">' . esc_html__('Effective From', 'woocommerce-us-duties') . ' <input type="date" name="bulk_effective_from" /></label> ';
-        echo '<label style="margin-right:14px;"><input type="checkbox" name="bulk_set_from" value="1" /> ' . esc_html__('Set From', 'woocommerce-us-duties') . '</label> ';
-        echo '<label style="margin-right:8px;">' . esc_html__('Effective To', 'woocommerce-us-duties') . ' <input type="date" name="bulk_effective_to" /></label> ';
-        echo '<label style="margin-right:14px;"><input type="checkbox" name="bulk_set_to" value="1" /> ' . esc_html__('Set To', 'woocommerce-us-duties') . '</label> ';
-        echo '<label style="margin-right:14px;"><input type="checkbox" name="bulk_clear_to" value="1" /> ' . esc_html__('Clear To (set NULL)', 'woocommerce-us-duties') . '</label>';
+        // Bulk edit panel (hidden by default, shown via JS when "Set Effective Dates..." is selected)
+        echo '<div id="wrd-bulk-edit-panel" class="wrd-bulk-edit-panel" style="display:none; background:#f9f9f9; border:1px solid #ddd; padding:12px; margin:8px 0;">';
+        echo '<h4 style="margin:0 0 12px 0;">' . esc_html__('Bulk Set Effective Dates', 'woocommerce-us-duties') . '</h4>';
+        echo '<div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">';
+        echo '<label style="display:flex; align-items:center; gap:6px;">';
+        echo '<input type="checkbox" name="bulk_set_from" value="1" /> ' . esc_html__('Set Effective From:', 'woocommerce-us-duties');
+        echo ' <input type="date" name="bulk_effective_from" style="margin-left:4px;" />';
+        echo '</label>';
+        echo '<label style="display:flex; align-items:center; gap:6px;">';
+        echo '<input type="checkbox" name="bulk_set_to" value="1" /> ' . esc_html__('Set Effective To:', 'woocommerce-us-duties');
+        echo ' <input type="date" name="bulk_effective_to" style="margin-left:4px;" />';
+        echo '</label>';
+        echo '<label style="display:flex; align-items:center; gap:6px;">';
+        echo '<input type="checkbox" name="bulk_clear_to" value="1" /> ' . esc_html__('Clear Effective To (set to never expire)', 'woocommerce-us-duties');
+        echo '</label>';
+        echo '</div>';
+        echo '<p class="description" style="margin:8px 0 0 0;">' . esc_html__('Check the boxes for the dates you want to update. Leave unchecked to keep existing values.', 'woocommerce-us-duties') . '</p>';
         echo '</div>';
         $table->search_box(__('Search Profiles', 'woocommerce-us-duties'), 'wrd_profiles');
         $table->display();
         echo '</form>';
+        
+        // JavaScript to show/hide bulk edit panel
+        echo '<script type="text/javascript">
+        jQuery(document).ready(function($) {
+            function toggleBulkEditPanel() {
+                var action = $("#bulk-action-selector-top").val() || $("#bulk-action-selector-bottom").val();
+                if (action === "set_dates") {
+                    $("#wrd-bulk-edit-panel").slideDown(200);
+                } else {
+                    $("#wrd-bulk-edit-panel").slideUp(200);
+                }
+            }
+            
+            // Watch both bulk action dropdowns
+            $("#bulk-action-selector-top, #bulk-action-selector-bottom").on("change", toggleBulkEditPanel);
+            
+            // Initial check on page load
+            toggleBulkEditPanel();
+        });
+        </script>';
     }
 
     private function render_tab_import_export(): void {
@@ -333,11 +363,11 @@ class WRD_Admin {
         foreach ($columns as $key => $label) {
             $new[$key] = $label;
             if ($key === 'sku') {
-                $new['wrd_customs'] = __('Customs', 'wrd-us-duty');
+                $new['wrd_customs'] = __('US Duty (est.)', 'wrd-us-duty');
             }
         }
         if (!isset($new['wrd_customs'])) {
-            $new['wrd_customs'] = __('Customs', 'wrd-us-duty');
+            $new['wrd_customs'] = __('US Duty (est.)', 'wrd-us-duty');
         }
         return $new;
     }
@@ -482,20 +512,28 @@ class WRD_Admin {
     }
 
     public function enqueue_admin_assets($hook) {
-        if ($hook !== 'edit.php') { return; }
-        if (!isset($_GET['post_type']) || $_GET['post_type'] !== 'product') { return; }
-        wp_enqueue_script('jquery-ui-autocomplete');
-        wp_enqueue_script(
-            'wrd-admin-quick-bulk',
-            WRD_US_DUTY_URL . 'assets/admin-quick-bulk.js',
-            ['jquery','jquery-ui-autocomplete'],
-            WRD_US_DUTY_VERSION,
-            true
-        );
-        wp_localize_script('wrd-admin-quick-bulk', 'WRDProfiles', [
-            'ajax' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wrd_search_profiles'),
-        ]);
+        // Products list page
+        if ($hook === 'edit.php' && isset($_GET['post_type']) && $_GET['post_type'] === 'product') {
+            wp_enqueue_script('jquery-ui-autocomplete');
+            wp_enqueue_script(
+                'wrd-admin-quick-bulk',
+                WRD_US_DUTY_URL . 'assets/admin-quick-bulk.js',
+                ['jquery','jquery-ui-autocomplete'],
+                WRD_US_DUTY_VERSION,
+                true
+            );
+            wp_localize_script('wrd-admin-quick-bulk', 'WRDProfiles', [
+                'ajax' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('wrd_search_profiles'),
+            ]);
+            return;
+        }
+        
+        // Customs hub pages
+        if ($hook === 'woocommerce_page_wrd-customs') {
+            wp_enqueue_script('jquery');
+            return;
+        }
     }
 
     public function ajax_search_profiles() {
