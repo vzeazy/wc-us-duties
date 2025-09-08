@@ -338,7 +338,7 @@ class WRD_Admin {
         if ($column !== 'wrd_customs') { return; }
         // Try product-level first
         $desc = get_post_meta($post_id, '_customs_description', true);
-        $origin = strtoupper((string) get_post_meta($post_id, '_country_of_origin', true));
+        $origin = strtoupper(trim((string) get_post_meta($post_id, '_country_of_origin', true)));
 
         // Helper to echo statuses consistently
         $echo_missing = function() {
@@ -361,7 +361,7 @@ class WRD_Admin {
         static $profile_cache = [];
         $get_profile = function($raw_desc, $cc) use (&$profile_cache) {
             $norm = WRD_DB::normalize_description((string)$raw_desc);
-            $ccU = strtoupper((string)$cc);
+            $ccU = strtoupper(trim((string)$cc));
             $key = $norm . '|' . $ccU;
             if (!array_key_exists($key, $profile_cache)) {
                 $profile_cache[$key] = WRD_DB::get_profile((string)$raw_desc, $ccU);
@@ -387,7 +387,7 @@ class WRD_Admin {
                 $found_any = false; $any_matched = false; $cc_seen = '';
                 foreach ($children as $vid) {
                     $vdesc = get_post_meta($vid, '_customs_description', true);
-                    $vorigin = strtoupper((string) get_post_meta($vid, '_country_of_origin', true));
+                    $vorigin = strtoupper(trim((string) get_post_meta($vid, '_country_of_origin', true)));
                     // Inherit from parent if missing
                     if ($vdesc === '' && $desc !== '') { $vdesc = $desc; }
                     if ($vorigin === '' && $origin !== '') { $vorigin = $origin; }
