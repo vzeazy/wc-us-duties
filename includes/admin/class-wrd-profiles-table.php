@@ -67,7 +67,8 @@ class WRD_Profiles_Table extends WP_List_Table {
 
     protected function column_description_raw($item) {
         $editUrl = add_query_arg([
-            'page' => 'wrd-customs-profiles',
+            'page' => 'wrd-customs',
+            'tab' => 'profiles',
             'action' => 'edit',
             'id' => $item['id'],
         ], admin_url('admin.php'));

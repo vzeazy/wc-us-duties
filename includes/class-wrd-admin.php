@@ -38,6 +38,9 @@ class WRD_Admin {
         // Admin assets and AJAX for profile search
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_wrd_search_profiles', [$this, 'ajax_search_profiles']);
+
+        // Redirect legacy admin page slugs
+        add_action('admin_init', [$this, 'redirect_legacy_pages']);
     }
 
     public function product_fields(): void {
@@ -588,6 +591,26 @@ class WRD_Admin {
             ];
         }
         wp_send_json($out);
+    }
+
+    private function redirect_legacy_pages(): void {
+        // Redirect old slug to new hub route to avoid "Sorry, you are not allowed to access this page."
+        if (!is_admin()) { return; }
+        $page = isset($_GET['page']) ? sanitize_key($_GET['page']) : '';
+        if ($page === 'wrd-customs-profiles') {
+            $args = [
+                'page' => 'wrd-customs',
+                'tab' => 'profiles',
+            ];
+            if (isset($_GET['action'])) { $args['action'] = sanitize_key(wp_unslash($_GET['action'])); }
+            if (isset($_GET['id'])) { $args['id'] = (int) $_GET['id']; }
+            if (isset($_GET['s'])) { $args['s'] = sanitize_text_field(wp_unslash($_GET['s'])); }
+            if (isset($_GET['orderby'])) { $args['orderby'] = sanitize_key($_GET['orderby']); }
+            if (isset($_GET['order'])) { $args['order'] = (strtolower($_GET['order']) === 'asc') ? 'asc' : 'desc'; }
+            if (isset($_GET['paged'])) { $args['paged'] = max(1, (int) $_GET['paged']); }
+            wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
+            exit;
+        }
     }
 
     // removed legacy profiles page
