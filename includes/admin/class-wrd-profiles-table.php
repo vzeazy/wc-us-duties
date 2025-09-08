@@ -96,12 +96,14 @@ class WRD_Profiles_Table extends WP_List_Table {
 
     public function get_bulk_actions() {
         return [
+            'set_dates' => __('Set Effective Dates…', 'woocommerce-us-duties'),
             'delete' => __('Delete', 'woocommerce-us-duties'),
         ];
     }
 
     public function process_bulk_action() {
-        if ('delete' === $this->current_action()) {
+        $action = $this->current_action();
+        if ('delete' === $action) {
             check_admin_referer('bulk-customs_profiles');
             $ids = isset($_REQUEST['ids']) ? (array) $_REQUEST['ids'] : [];
             $ids = array_map('intval', $ids);
@@ -109,6 +111,37 @@ class WRD_Profiles_Table extends WP_List_Table {
                 global $wpdb; $table = WRD_DB::table_profiles();
                 $in = '(' . implode(',', array_fill(0, count($ids), '%d')) . ')';
                 $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE id IN {$in}", $ids));
+            }
+        } elseif ('set_dates' === $action) {
+            check_admin_referer('bulk-customs_profiles');
+            $ids = isset($_REQUEST['ids']) ? (array) $_REQUEST['ids'] : [];
+            $ids = array_map('intval', $ids);
+            if ($ids) {
+                $set_from = !empty($_REQUEST['bulk_set_from']);
+                $set_to = !empty($_REQUEST['bulk_set_to']);
+                $clear_to = !empty($_REQUEST['bulk_clear_to']);
+                $from = isset($_REQUEST['bulk_effective_from']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_from'])) : '';
+                $to = isset($_REQUEST['bulk_effective_to']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_to'])) : '';
+
+                // Validate simple YYYY-MM-DD
+                $is_date = function($d) { return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d); };
+                if ($set_from && !$is_date($from)) { $set_from = false; }
+                if ($set_to && !$is_date($to)) { $set_to = false; }
+
+                global $wpdb; $table = WRD_DB::table_profiles();
+                foreach ($ids as $id) {
+                    $data = [];
+                    $fmt = [];
+                    if ($set_from) { $data['effective_from'] = $from; $fmt[] = '%s'; }
+                    if ($set_to) { $data['effective_to'] = $to; $fmt[] = '%s'; }
+                    if (!empty($data)) {
+                        $wpdb->update($table, $data, ['id' => $id], $fmt, ['%d']);
+                    }
+                    if ($clear_to) {
+                        // Explicit NULL for effective_to
+                        $wpdb->query($wpdb->prepare("UPDATE {$table} SET effective_to = NULL WHERE id=%d", $id));
+                    }
+                }
             }
         }
     }

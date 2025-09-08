@@ -206,10 +206,18 @@ class WRD_Admin {
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-profiles-table.php';
         $table = new WRD_Profiles_Table();
         $table->process_bulk_action();
-        echo '<form method="get">';
+        echo '<form method="post">';
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
         $table->prepare_items();
+        // Bulk set dates controls (used when choosing the "Set Effective Dates…" bulk action)
+        echo '<div class="alignleft actions" style="margin:6px 0;">';
+        echo '<label style="margin-right:8px;">' . esc_html__('Effective From', 'woocommerce-us-duties') . ' <input type="date" name="bulk_effective_from" /></label> ';
+        echo '<label style="margin-right:14px;"><input type="checkbox" name="bulk_set_from" value="1" /> ' . esc_html__('Set From', 'woocommerce-us-duties') . '</label> ';
+        echo '<label style="margin-right:8px;">' . esc_html__('Effective To', 'woocommerce-us-duties') . ' <input type="date" name="bulk_effective_to" /></label> ';
+        echo '<label style="margin-right:14px;"><input type="checkbox" name="bulk_set_to" value="1" /> ' . esc_html__('Set To', 'woocommerce-us-duties') . '</label> ';
+        echo '<label style="margin-right:14px;"><input type="checkbox" name="bulk_clear_to" value="1" /> ' . esc_html__('Clear To (set NULL)', 'woocommerce-us-duties') . '</label>';
+        echo '</div>';
         $table->search_box(__('Search Profiles', 'woocommerce-us-duties'), 'wrd_profiles');
         $table->display();
         echo '</form>';
