@@ -233,6 +233,31 @@ class WRD_Admin {
         submit_button(__('Import JSON', 'woocommerce-us-duties'));
         echo '</form>';
 
+        // Handle Profiles CSV import
+        if (!empty($_POST['wrd_import_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_import_nonce'])), 'wrd_import_csv')) {
+            $this->handle_csv_import();
+            echo '<div class="updated"><p>' . esc_html__('Profiles CSV import completed.', 'woocommerce-us-duties') . '</p></div>';
+        }
+
+        // Handle Zonos JSON import
+        if (!empty($_POST['wrd_import_json_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_import_json_nonce'])), 'wrd_import_json')) {
+            $json_summary = $this->handle_zonos_json_import();
+            if (is_array($json_summary)) {
+                echo '<div class="notice notice-info"><p>' . esc_html(sprintf(
+                    /* translators: 1: inserted count, 2: updated count, 3: skipped count, 4: errors count */
+                    __('JSON Import: %1$d inserted, %2$d updated, %3$d skipped, %4$d errors.', 'woocommerce-us-duties'),
+                    (int)($json_summary['inserted'] ?? 0),
+                    (int)($json_summary['updated'] ?? 0),
+                    (int)($json_summary['skipped'] ?? 0),
+                    (int)($json_summary['errors'] ?? 0)
+                )) . '</p>';
+                if (!empty($json_summary['error_messages'])) {
+                    echo '<details><summary>' . esc_html__('Error details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:220px;overflow:auto;">' . esc_html(implode("\n", array_slice((array)$json_summary['error_messages'], 0, 50))) . '</pre></details>';
+                }
+                echo '</div>';
+            }
+        }
+
         // Products CSV importer
         if (!empty($_POST['wrd_products_import_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_products_import_nonce'])), 'wrd_products_import')) {
             $summary = $this->handle_products_csv_import();
