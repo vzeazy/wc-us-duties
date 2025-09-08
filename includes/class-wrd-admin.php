@@ -593,7 +593,7 @@ class WRD_Admin {
         wp_send_json($out);
     }
 
-    private function redirect_legacy_pages(): void {
+    public function redirect_legacy_pages(): void {
         // Redirect old slug to new hub route to avoid "Sorry, you are not allowed to access this page."
         if (!is_admin()) { return; }
         $page = isset($_GET['page']) ? sanitize_key($_GET['page']) : '';
