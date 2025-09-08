@@ -36,6 +36,7 @@ class WRD_Profiles_Table extends WP_List_Table {
             'description_raw' => ['description_raw', false],
             'country_code' => ['country_code', false],
             'hs_code' => ['hs_code', false],
+            'products' => ['products', false],
             'effective_from' => ['effective_from', false],
         ];
     }
@@ -215,28 +216,59 @@ class WRD_Profiles_Table extends WP_List_Table {
         $where = '1=1';
         $params = [];
         if ($this->search !== '') {
-            $where .= ' AND (description_raw LIKE %s OR country_code LIKE %s OR hs_code LIKE %s)';
+            $where .= ' AND (t.description_raw LIKE %s OR t.country_code LIKE %s OR t.hs_code LIKE %s)';
             $like = '%' . $wpdb->esc_like($this->search) . '%';
             $params[] = $like; $params[] = $like; $params[] = $like;
         }
 
         $orderby = isset($_REQUEST['orderby']) ? sanitize_key($_REQUEST['orderby']) : 'id';
         $order = (isset($_REQUEST['order']) && strtolower($_REQUEST['order']) === 'asc') ? 'ASC' : 'DESC';
-        $allowed = ['id','description_raw','country_code','hs_code','effective_from'];
+        $allowed = ['id','description_raw','country_code','hs_code','effective_from','products'];
         if (!in_array($orderby, $allowed, true)) { $orderby = 'id'; }
 
         $total = (int) $wpdb->get_var($params
-            ? $wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE {$where}", $params)
-            : "SELECT COUNT(*) FROM {$table} WHERE {$where}"
+            ? $wpdb->prepare("SELECT COUNT(*) FROM {$table} t WHERE {$where}", $params)
+            : "SELECT COUNT(*) FROM {$table} t WHERE {$where}"
         );
 
-        $sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
-        $rows = $params
-            ? $wpdb->get_results($wpdb->prepare($sql, array_merge($params, [$per_page, $offset])), ARRAY_A)
-            : $wpdb->get_results($wpdb->prepare($sql, $per_page, $offset), ARRAY_A);
+        if ($orderby === 'products') {
+            // Fetch all rows first (to compute counts across entire set), then sort in PHP by impacted count
+            $sqlAll = "SELECT t.* FROM {$table} AS t WHERE {$where}";
+            $allRows = $params
+                ? $wpdb->get_results($wpdb->prepare($sqlAll, $params), ARRAY_A)
+                : $wpdb->get_results($sqlAll, ARRAY_A);
 
-        $this->items = $rows;
-        $this->counts = $this->fetch_counts_for_rows($rows);
+            $countsAll = $this->fetch_counts_for_rows($allRows);
+            // Attach count and sort
+            foreach ($allRows as &$r) {
+                $desc = isset($r['description_normalized']) ? (string)$r['description_normalized'] : '';
+                $cc = isset($r['country_code']) ? strtoupper((string)$r['country_code']) : '';
+                $key = $desc . '|' . $cc;
+                $r['__impacted_cnt'] = isset($countsAll[$key]) ? (int)$countsAll[$key] : 0;
+            }
+            unset($r);
+            usort($allRows, function($a, $b) use ($order) {
+                $av = (int)($a['__impacted_cnt'] ?? 0);
+                $bv = (int)($b['__impacted_cnt'] ?? 0);
+                if ($av === $bv) { return 0; }
+                return ($order === 'ASC') ? ($av <=> $bv) : ($bv <=> $av);
+            });
+
+            $total = count($allRows);
+            $rows = array_slice($allRows, $offset, $per_page);
+            $this->items = $rows;
+            $this->counts = $countsAll;
+        } else {
+            // SQL-level ordering for other columns
+            $orderExpr = 't.' . $orderby; // safe
+            $sql = "SELECT t.* FROM {$table} AS t WHERE {$where} ORDER BY {$orderExpr} {$order} LIMIT %d OFFSET %d";
+            $rows = $params
+                ? $wpdb->get_results($wpdb->prepare($sql, array_merge($params, [$per_page, $offset])), ARRAY_A)
+                : $wpdb->get_results($wpdb->prepare($sql, $per_page, $offset), ARRAY_A);
+
+            $this->items = $rows;
+            $this->counts = $this->fetch_counts_for_rows($rows);
+        }
         $this->_column_headers = [$this->get_columns(), [], $this->get_sortable_columns(), 'description_raw'];
         $this->set_pagination_args([
             'total_items' => $total,
