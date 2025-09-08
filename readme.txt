@@ -8,34 +8,34 @@ Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Estimate US import duties and fees at checkout and manage customs profiles. HPOS-compatible. JSON/CSV importers, WPML-ready currency, and CUSMA handling.
+In the era of 'America First' tariffs, where imports get taxed like they're crossing the border wall, this plugin helps you estimate US duties at checkout and manage customs profiles like a tariff titan. HPOS-compatible, with JSON/CSV importers, WPML-ready currency, and CUSMA handling – because even trade deals need a MAGA makeover!
 
 == Description ==
 
-WooCommerce US Duties & Customs adds a duty estimate at checkout and tools to manage customs profiles (HS codes and rate components) keyed by product description and origin. It supports CUSMA duty-free handling per line item, live FX via exchangerate.host, and WPML multi-currency compatibility. Admins can import data from Zonos JSON dumps and CSV, and bulk-assign customs fields to products.
+Welcome to WooCommerce US Duties & Customs, your hilarious guide to the Trump tariff jungle! Slap those import duties on your customers' purchases and watch the profits soar higher than a Trump rally crowd. Manage customs profiles with HS codes and rates, support CUSMA duty-free for our northern and southern amigos, grab live FX rates from exchangerate.host, and stay WPML-ready for when the world speaks in tongues. Import data from Zonos JSON or CSV, bulk-assign customs fields, and turn your WooCommerce store into a tariff-teering machine – 'Make America Expensive Again'!
 
 Features:
-- Checkout fee (DDP) or info-only (DAP)
-- Line-item CUSMA duty-free for CA/US origins (configurable)
-- Shipping channel mapping (postal vs commercial) from chosen rate
-- JSON/CSV importers for profiles; CSV assigner for products
-- Admin grid with search, pagination, edit, bulk delete, and impacted products drilldown
-- WPML multi-currency compatibility; exchangerate.host FX cache
-- HPOS compatible; order snapshot stored in meta
+- Checkout fee (DDP) or info-only (DAP) – because tariffs are the new black!
+- Line-item CUSMA duty-free for CA/US origins (configurable) – NAFTA who? CUSMA rules!
+- Shipping channel mapping (postal vs commercial) – choose your poison, tariff style.
+- JSON/CSV importers for profiles; CSV assigner for products – data import faster than Trump's tweet storms.
+- Admin grid with search, pagination, edit, bulk delete, and impacted products drilldown – manage like a boss, tariff edition.
+- WPML multi-currency compatibility; exchangerate.host FX cache – because dollars aren't the only currency in Trump's world.
+- HPOS compatible; order snapshot stored in meta – future-proof like Trump's hair.
 
 == Installation ==
 
-Install and activate. Visit WooCommerce → Customs & Duties to configure settings, import customs profiles, and assign customs fields to products.
+Install and activate. Head to WooCommerce → Customs & Duties to configure settings, import customs profiles, and assign those tariff fields to your products. It's easier than building a wall!
 
 == Frequently Asked Questions ==
 
 = Does this calculate brokerage or MPF? =
 
-Basic fee settings are available; detailed brokerage/MPF tables will be added in future versions.
+You bet! Basic fee settings are here, with detailed brokerage/MPF tables coming soon – because in the tariff game, every fee counts, just like Trump's 'very fine' walls.
 
 = Does it support split-ship optimization (Case B)? =
 
-The MVP includes structure for this; a full optimizer is planned.
+Not yet, but the structure's in place. We're optimizing faster than Trump changes his mind on trade deals!
 
 == Changelog ==
 
