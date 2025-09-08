@@ -103,6 +103,7 @@ class WRD_Profiles_Table extends WP_List_Table {
 
     public function process_bulk_action() {
         $action = $this->current_action();
+        
         if ('delete' === $action) {
             check_admin_referer('bulk-customs_profiles');
             $ids = isset($_REQUEST['ids']) ? (array) $_REQUEST['ids'] : [];
@@ -110,40 +111,99 @@ class WRD_Profiles_Table extends WP_List_Table {
             if ($ids) {
                 global $wpdb; $table = WRD_DB::table_profiles();
                 $in = '(' . implode(',', array_fill(0, count($ids), '%d')) . ')';
-                $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE id IN {$in}", $ids));
+                $deleted = $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE id IN {$in}", $ids));
+                if ($deleted !== false) {
+                    add_action('admin_notices', function() use ($deleted) {
+                        echo '<div class="notice notice-success is-dismissible"><p>' . 
+                             sprintf(
+                                 /* translators: %d: number of deleted profiles */
+                                 _n('%d profile deleted.', '%d profiles deleted.', $deleted, 'woocommerce-us-duties'), 
+                                 $deleted
+                             ) . '</p></div>';
+                    });
+                }
             }
-        } elseif ('set_dates' === $action) {
-            check_admin_referer('bulk-customs_profiles');
+        } elseif ('set_dates' === $action || isset($_POST['bulk_edit'])) {
+            // Handle both old and new bulk edit forms
+            if (isset($_POST['bulk_edit'])) {
+                check_admin_referer('wrd_bulk_edit_nonce', 'bulk_edit_nonce');
+            } else {
+                check_admin_referer('bulk-customs_profiles');
+            }
+            
             $ids = isset($_REQUEST['ids']) ? (array) $_REQUEST['ids'] : [];
             $ids = array_map('intval', $ids);
+            
             if ($ids) {
-                $set_from = !empty($_REQUEST['bulk_set_from']);
-                $set_to = !empty($_REQUEST['bulk_set_to']);
-                $clear_to = !empty($_REQUEST['bulk_clear_to']);
-                $from = isset($_REQUEST['bulk_effective_from']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_from'])) : '';
-                $to = isset($_REQUEST['bulk_effective_to']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_to'])) : '';
-
-                // Validate simple YYYY-MM-DD
-                $is_date = function($d) { return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d); };
-                if ($set_from && !$is_date($from)) { $set_from = false; }
-                if ($set_to && !$is_date($to)) { $set_to = false; }
-
-                global $wpdb; $table = WRD_DB::table_profiles();
-                foreach ($ids as $id) {
-                    $data = [];
-                    $fmt = [];
-                    if ($set_from) { $data['effective_from'] = $from; $fmt[] = '%s'; }
-                    if ($set_to) { $data['effective_to'] = $to; $fmt[] = '%s'; }
-                    if (!empty($data)) {
-                        $wpdb->update($table, $data, ['id' => $id], $fmt, ['%d']);
-                    }
-                    if ($clear_to) {
-                        // Explicit NULL for effective_to
-                        $wpdb->query($wpdb->prepare("UPDATE {$table} SET effective_to = NULL WHERE id=%d", $id));
-                    }
+                $updated = $this->handle_bulk_date_update($ids);
+                if ($updated > 0) {
+                    add_action('admin_notices', function() use ($updated) {
+                        echo '<div class="notice notice-success is-dismissible"><p>' . 
+                             sprintf(
+                                 /* translators: %d: number of updated profiles */
+                                 _n('%d profile updated.', '%d profiles updated.', $updated, 'woocommerce-us-duties'), 
+                                 $updated
+                             ) . '</p></div>';
+                    });
                 }
             }
         }
+    }
+
+    private function handle_bulk_date_update($ids) {
+        global $wpdb;
+        $table = WRD_DB::table_profiles();
+        $updated = 0;
+        
+        // Handle new bulk edit format
+        $from_action = isset($_REQUEST['bulk_effective_from_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_from_action'])) : '';
+        $to_action = isset($_REQUEST['bulk_effective_to_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_to_action'])) : '';
+        $from_date = isset($_REQUEST['bulk_effective_from']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_from'])) : '';
+        $to_date = isset($_REQUEST['bulk_effective_to']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_to'])) : '';
+        
+        // Fallback to old format for backward compatibility
+        if (empty($from_action) && empty($to_action)) {
+            $from_action = !empty($_REQUEST['bulk_set_from']) ? 'set' : '';
+            $to_action = !empty($_REQUEST['bulk_set_to']) ? 'set' : '';
+            if (!empty($_REQUEST['bulk_clear_to'])) {
+                $to_action = 'clear';
+            }
+        }
+        
+        // Validate dates
+        $is_date = function($d) { return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d); };
+        
+        foreach ($ids as $id) {
+            $data = [];
+            $fmt = [];
+            
+            // Handle effective_from
+            if ($from_action === 'set' && $is_date($from_date)) {
+                $data['effective_from'] = $from_date;
+                $fmt[] = '%s';
+            } elseif ($from_action === 'clear') {
+                $data['effective_from'] = null;
+                $fmt[] = '%s';
+            }
+            
+            // Handle effective_to
+            if ($to_action === 'set' && $is_date($to_date)) {
+                $data['effective_to'] = $to_date;
+                $fmt[] = '%s';
+            } elseif ($to_action === 'clear') {
+                $data['effective_to'] = null;
+                $fmt[] = '%s';
+            }
+            
+            if (!empty($data)) {
+                $result = $wpdb->update($table, $data, ['id' => $id], $fmt, ['%d']);
+                if ($result !== false) {
+                    $updated++;
+                }
+            }
+        }
+        
+        return $updated;
     }
 
     public function prepare_items() {

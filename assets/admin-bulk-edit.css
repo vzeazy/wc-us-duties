@@ -1,0 +1,153 @@
+/* WooCommerce-style Bulk Edit Panel */
+#wrd-bulk-edit {
+    background: #f9f9f9;
+    border: 1px solid #dfdfdf;
+    margin: 0 0 10px 0;
+    padding: 0;
+}
+
+#wrd-bulk-edit .bulk-edit-fields {
+    padding: 10px;
+    background: #fefefe;
+    border-bottom: 1px solid #dfdfdf;
+}
+
+#wrd-bulk-edit .inline-edit-legend {
+    font-weight: 600;
+    font-size: 13px;
+    color: #23282d;
+    margin: 0 0 10px 0;
+    padding: 0;
+    border: none;
+}
+
+#wrd-bulk-edit .inline-edit-col {
+    float: left;
+    width: 48%;
+    margin-right: 2%;
+    margin-bottom: 10px;
+}
+
+#wrd-bulk-edit .inline-edit-col:nth-child(even) {
+    margin-right: 0;
+}
+
+#wrd-bulk-edit .alignleft {
+    display: block;
+    margin-bottom: 8px;
+}
+
+#wrd-bulk-edit .title {
+    display: inline-block;
+    width: 120px;
+    font-weight: 600;
+    color: #23282d;
+    vertical-align: top;
+    padding-top: 2px;
+}
+
+#wrd-bulk-edit .input-text-wrap {
+    display: inline-block;
+    vertical-align: top;
+}
+
+#wrd-bulk-edit select.bulk-date-action {
+    width: 140px;
+    margin-right: 5px;
+}
+
+#wrd-bulk-edit input.bulk-date-input {
+    width: 140px;
+    margin-left: 5px;
+}
+
+#wrd-bulk-edit .bulk-edit-save {
+    background: #f1f1f1;
+    border-top: 1px solid #dfdfdf;
+    padding: 8px 10px;
+    overflow: hidden;
+}
+
+#wrd-bulk-edit .bulk-edit-save .button {
+    margin: 0 5px 0 0;
+}
+
+#wrd-bulk-edit .bulk-edit-save .spinner {
+    float: right;
+    margin: 3px 10px 0 0;
+}
+
+#wrd-bulk-edit .bulk-edit-save .spinner.is-active {
+    visibility: visible;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 782px) {
+    #wrd-bulk-edit .inline-edit-col {
+        float: none;
+        width: 100%;
+        margin-right: 0;
+    }
+    
+    #wrd-bulk-edit .title {
+        width: 100%;
+        display: block;
+        margin-bottom: 5px;
+    }
+    
+    #wrd-bulk-edit .input-text-wrap {
+        display: block;
+        width: 100%;
+    }
+    
+    #wrd-bulk-edit select.bulk-date-action,
+    #wrd-bulk-edit input.bulk-date-input {
+        width: 100%;
+        margin: 2px 0;
+    }
+}
+
+/* Animation improvements */
+#wrd-bulk-edit .bulk-edit-fields {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+
+#wrd-bulk-edit .bulk-edit-fields.fade-in {
+    opacity: 1;
+}
+
+/* Focus states */
+#wrd-bulk-edit input:focus,
+#wrd-bulk-edit select:focus {
+    border-color: #0073aa;
+    box-shadow: 0 0 0 1px #0073aa;
+    outline: none;
+}
+
+/* Clear float helper */
+#wrd-bulk-edit .clear {
+    clear: both;
+    height: 0;
+    overflow: hidden;
+}
+
+/* Success/Error message styling */
+.wrd-bulk-edit-notice {
+    margin: 5px 0 15px 0;
+    padding: 8px 12px;
+    border-left: 4px solid;
+    background: #fff;
+}
+
+.wrd-bulk-edit-notice.notice-success {
+    border-left-color: #46b450;
+    color: #155724;
+    background-color: #d4edda;
+}
+
+.wrd-bulk-edit-notice.notice-error {
+    border-left-color: #dc3232;
+    color: #721c24;
+    background-color: #f8d7da;
+}

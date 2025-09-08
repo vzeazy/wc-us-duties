@@ -210,47 +210,70 @@ class WRD_Admin {
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
         $table->prepare_items();
-        // Bulk edit panel (hidden by default, shown via JS when "Set Effective Dates..." is selected)
-        echo '<div id="wrd-bulk-edit-panel" class="wrd-bulk-edit-panel" style="display:none; background:#f9f9f9; border:1px solid #ddd; padding:12px; margin:8px 0;">';
-        echo '<h4 style="margin:0 0 12px 0;">' . esc_html__('Bulk Set Effective Dates', 'woocommerce-us-duties') . '</h4>';
-        echo '<div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">';
-        echo '<label style="display:flex; align-items:center; gap:6px;">';
-        echo '<input type="checkbox" name="bulk_set_from" value="1" /> ' . esc_html__('Set Effective From:', 'woocommerce-us-duties');
-        echo ' <input type="date" name="bulk_effective_from" style="margin-left:4px;" />';
-        echo '</label>';
-        echo '<label style="display:flex; align-items:center; gap:6px;">';
-        echo '<input type="checkbox" name="bulk_set_to" value="1" /> ' . esc_html__('Set Effective To:', 'woocommerce-us-duties');
-        echo ' <input type="date" name="bulk_effective_to" style="margin-left:4px;" />';
-        echo '</label>';
-        echo '<label style="display:flex; align-items:center; gap:6px;">';
-        echo '<input type="checkbox" name="bulk_clear_to" value="1" /> ' . esc_html__('Clear Effective To (set to never expire)', 'woocommerce-us-duties');
-        echo '</label>';
-        echo '</div>';
-        echo '<p class="description" style="margin:8px 0 0 0;">' . esc_html__('Check the boxes for the dates you want to update. Leave unchecked to keep existing values.', 'woocommerce-us-duties') . '</p>';
-        echo '</div>';
+        // WooCommerce-style bulk edit panel
+        $this->render_bulk_edit_panel();
         $table->search_box(__('Search Profiles', 'woocommerce-us-duties'), 'wrd_profiles');
         $table->display();
         echo '</form>';
         
-        // JavaScript to show/hide bulk edit panel
-        echo '<script type="text/javascript">
-        jQuery(document).ready(function($) {
-            function toggleBulkEditPanel() {
-                var action = $("#bulk-action-selector-top").val() || $("#bulk-action-selector-bottom").val();
-                if (action === "set_dates") {
-                    $("#wrd-bulk-edit-panel").slideDown(200);
-                } else {
-                    $("#wrd-bulk-edit-panel").slideUp(200);
-                }
-            }
-            
-            // Watch both bulk action dropdowns
-            $("#bulk-action-selector-top, #bulk-action-selector-bottom").on("change", toggleBulkEditPanel);
-            
-            // Initial check on page load
-            toggleBulkEditPanel();
-        });
-        </script>';
+        // Enqueue bulk edit assets
+        wp_enqueue_style('wrd-bulk-edit', WRD_US_DUTY_URL . 'assets/admin-bulk-edit.css', [], WRD_US_DUTY_VERSION);
+        wp_enqueue_script('wrd-bulk-edit', WRD_US_DUTY_URL . 'assets/admin-bulk-edit.js', ['jquery', 'jquery-ui-autocomplete'], WRD_US_DUTY_VERSION, true);
+        wp_localize_script('wrd-bulk-edit', 'wrdBulkEdit', [
+            'nonce' => wp_create_nonce('wrd_bulk_edit_nonce'),
+            'strings' => [
+                'confirm_delete' => __('Are you sure you want to delete the selected profiles?', 'woocommerce-us-duties'),
+                'no_items_selected' => __('Please select items to perform bulk actions.', 'woocommerce-us-duties'),
+                'processing' => __('Processing...', 'woocommerce-us-duties'),
+            ]
+        ]);
+    }
+
+    private function render_bulk_edit_panel(): void {
+        ?>
+        <div id="wrd-bulk-edit" class="tablenav" style="display: none;">
+            <div class="alignleft actions bulkactions">
+                <div class="bulk-edit-fields">
+                    <fieldset class="inline-edit-col-left">
+                        <legend class="inline-edit-legend"><?php esc_html_e('Bulk Edit Effective Dates', 'woocommerce-us-duties'); ?></legend>
+                        <div class="inline-edit-col">
+                            <label class="alignleft">
+                                <span class="title"><?php esc_html_e('Effective From', 'woocommerce-us-duties'); ?></span>
+                                <span class="input-text-wrap">
+                                    <select name="bulk_effective_from_action" class="bulk-date-action">
+                                        <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
+                                        <option value="set"><?php esc_html_e('Set to:', 'woocommerce-us-duties'); ?></option>
+                                        <option value="clear"><?php esc_html_e('Clear', 'woocommerce-us-duties'); ?></option>
+                                    </select>
+                                    <input type="date" name="bulk_effective_from" class="bulk-date-input" style="display: none;" />
+                                </span>
+                            </label>
+                        </div>
+                        <div class="inline-edit-col">
+                            <label class="alignleft">
+                                <span class="title"><?php esc_html_e('Effective To', 'woocommerce-us-duties'); ?></span>
+                                <span class="input-text-wrap">
+                                    <select name="bulk_effective_to_action" class="bulk-date-action">
+                                        <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
+                                        <option value="set"><?php esc_html_e('Set to:', 'woocommerce-us-duties'); ?></option>
+                                        <option value="clear"><?php esc_html_e('Clear (never expires)', 'woocommerce-us-duties'); ?></option>
+                                    </select>
+                                    <input type="date" name="bulk_effective_to" class="bulk-date-input" style="display: none;" />
+                                </span>
+                            </label>
+                        </div>
+                    </fieldset>
+                    <div class="bulk-edit-save">
+                        <button type="button" class="button cancel alignleft"><?php esc_html_e('Cancel', 'woocommerce-us-duties'); ?></button>
+                        <input type="submit" name="bulk_edit" class="button button-primary alignright" value="<?php esc_attr_e('Update', 'woocommerce-us-duties'); ?>" />
+                        <span class="spinner"></span>
+                        <input type="hidden" name="bulk_edit_nonce" value="<?php echo esc_attr(wp_create_nonce('wrd_bulk_edit_nonce')); ?>" />
+                        <br class="clear" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 
     private function render_tab_import_export(): void {
