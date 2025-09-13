@@ -41,6 +41,29 @@ class WRD_Admin {
 
         // Redirect legacy admin page slugs
         add_action('admin_init', [$this, 'redirect_legacy_pages']);
+
+        // Handle CSV exports early before any HTML is sent
+        add_action('admin_init', [$this, 'maybe_handle_exports'], 1);
+    }
+
+    /**
+     * Handle export actions as early as possible to avoid any HTML being
+     * printed before CSV headers. This prevents stray markup at the top
+     * of the downloaded CSV files.
+     */
+    public function maybe_handle_exports(): void {
+        if (!is_admin()) { return; }
+        // Only act on our admin page
+        $page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
+        if ($page !== 'wrd-customs') { return; }
+        if (empty($_GET['action'])) { return; }
+        $action = sanitize_key(wp_unslash($_GET['action']));
+        if (!current_user_can('manage_woocommerce')) { return; }
+        if ($action === 'export') {
+            $this->export_csv(); // exits
+        } elseif ($action === 'export_products') {
+            $this->export_products_csv(); // exits
+        }
     }
 
     public function product_fields(): void {
@@ -824,6 +847,10 @@ class WRD_Admin {
 
     private function export_csv(): void {
         if (!current_user_can('manage_woocommerce')) { return; }
+        // Ensure no stray output before headers
+        if (function_exists('ob_get_level')) {
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+        }
         nocache_headers();
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename=wrd_customs_profiles_' . date('Ymd_His') . '.csv');
@@ -864,6 +891,10 @@ class WRD_Admin {
         if (!current_user_can('manage_woocommerce')) { return; }
         // Stream CSV of all products and variations with HS code and postal/commercial duty rates
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
+        // Ensure no stray output before headers
+        if (function_exists('ob_get_level')) {
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+        }
         nocache_headers();
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename=wrd_products_duties_' . date('Ymd_His') . '.csv');
