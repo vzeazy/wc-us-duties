@@ -68,10 +68,12 @@ add_filter('plugin_row_meta', function ($links, $file) {
     if ($file !== plugin_basename(__FILE__)) { return $links; }
     if (!current_user_can('manage_woocommerce')) { return $links; }
     $export = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import&action=export')), esc_html__('Export Profiles CSV', 'woocommerce-us-duties'));
+    $export_products = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import&action=export_products')), esc_html__('Export Products CSV', 'woocommerce-us-duties'));
     $reindex = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=tools')), esc_html__('Reindex Products', 'woocommerce-us-duties'));
     $docs = '<a href="https://" target="_blank" rel="noopener">' . esc_html__('Docs', 'woocommerce-us-duties') . '</a>';
     // We don’t have a hosted docs URL; keep placeholder or remove if undesired
     $links[] = $export;
+    $links[] = $export_products;
     $links[] = $reindex;
     return $links;
 }, 10, 2);

@@ -156,9 +156,15 @@ class WRD_Admin {
     public function render_customs_hub(): void {
         if (!current_user_can('manage_woocommerce')) { return; }
         // Early export handling
-        if (isset($_GET['action']) && $_GET['action'] === 'export') {
-            $this->export_csv();
-            return;
+        if (isset($_GET['action'])) {
+            $action = sanitize_key(wp_unslash($_GET['action']));
+            if ($action === 'export') { // legacy: export profiles
+                $this->export_csv();
+                return;
+            } elseif ($action === 'export_products') {
+                $this->export_products_csv();
+                return;
+            }
         }
 
         echo '<div class="wrap">';
@@ -200,8 +206,8 @@ class WRD_Admin {
             $this->render_profile_form();
             return;
         }
-        $newUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'profiles', 'action' => 'new'], admin_url('admin.php'));
-        $exportUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'] + array_intersect_key($_GET, ['s' => true]), admin_url('admin.php'));
+    $newUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'profiles', 'action' => 'new'], admin_url('admin.php'));
+    $exportUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'] + array_intersect_key($_GET, ['s' => true]), admin_url('admin.php'));
         echo '<a href="' . esc_url($newUrl) . '" class="page-title-action">' . esc_html__('Add New', 'woocommerce-us-duties') . '</a> ';
         echo '<a href="' . esc_url($exportUrl) . '" class="page-title-action">' . esc_html__('Export CSV', 'woocommerce-us-duties') . '</a>';
         echo '<hr class="wp-header-end" />';
@@ -286,6 +292,14 @@ class WRD_Admin {
         echo '<input type="file" name="wrd_csv" accept=".csv" required /> ';
         submit_button(__('Import', 'woocommerce-us-duties'));
         echo '</form>';
+
+    // Quick export links
+    $export_profiles_url = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'], admin_url('admin.php'));
+    $export_products_url = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export_products'], admin_url('admin.php'));
+    echo '<p style="margin-top:8px;">';
+    echo '<a href="' . esc_url($export_profiles_url) . '" class="button">' . esc_html__('Export Profiles CSV', 'woocommerce-us-duties') . '</a> ';
+    echo '<a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a>';
+    echo '</p>';
 
         echo '<h2>' . esc_html__('Import JSON (Zonos dump)', 'woocommerce-us-duties') . '</h2>';
         echo '<form method="post" enctype="multipart/form-data" style="margin-top:8px;">';
@@ -842,6 +856,101 @@ class WRD_Admin {
                 $r['notes'],
             ]);
         }
+        fclose($fh);
+        exit;
+    }
+
+    private function export_products_csv(): void {
+        if (!current_user_can('manage_woocommerce')) { return; }
+        // Stream CSV of all products and variations with HS code and postal/commercial duty rates
+        if (function_exists('set_time_limit')) { @set_time_limit(0); }
+        nocache_headers();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=wrd_products_duties_' . date('Ymd_His') . '.csv');
+
+        $fh = fopen('php://output', 'w');
+        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, postal %, commercial %
+        fputcsv($fh, ['product_id','parent_id','type','sku','name','variation','customs_description','country_of_origin','hs_code','postal_rate_pct','commercial_rate_pct']);
+
+        $paged = 1;
+        $per_page = 300;
+        do {
+            $q = new WP_Query([
+                'post_type' => ['product','product_variation'],
+                'post_status' => ['publish','draft','pending','private'],
+                'fields' => 'ids',
+                'posts_per_page' => $per_page,
+                'paged' => $paged,
+                'orderby' => 'ID',
+                'order' => 'ASC',
+                'no_found_rows' => true,
+            ]);
+            if (!$q->have_posts()) { break; }
+            foreach ($q->posts as $pid) {
+                $product = wc_get_product($pid);
+                if (!$product) { continue; }
+                $type = $product->get_type();
+                $parent_id = $product->is_type('variation') ? (int)$product->get_parent_id() : 0;
+                $sku = (string)$product->get_sku();
+                $name = (string)$product->get_name();
+                // Resolve customs description and origin with inheritance for variations
+                $desc = (string)$product->get_meta('_customs_description', true);
+                $origin = strtoupper((string)$product->get_meta('_country_of_origin', true));
+                if ($product->is_type('variation') && $parent_id) {
+                    if ($desc === '') { $desc = (string) get_post_meta($parent_id, '_customs_description', true); }
+                    if ($origin === '') { $origin = strtoupper((string) get_post_meta($parent_id, '_country_of_origin', true)); }
+                }
+                $desc = trim((string)$desc);
+                $origin = strtoupper(trim((string)$origin));
+
+                // Variation attributes printable
+                $variation = '';
+                if ($product->is_type('variation')) {
+                    $attrs = $product->get_attributes(); // e.g., [ 'attribute_pa_color' => 'red' ]
+                    if (is_array($attrs) && !empty($attrs)) {
+                        $parts = [];
+                        foreach ($attrs as $k => $v) {
+                            $label = is_string($k) ? preg_replace('/^attribute_/', '', $k) : (string)$k;
+                            $val = is_array($v) ? implode('|', array_map('strval', $v)) : (string)$v;
+                            $parts[] = $label . '=' . $val;
+                        }
+                        $variation = implode(';', $parts);
+                    }
+                }
+
+                $hs = '';
+                $postalPct = '';
+                $commercialPct = '';
+                if ($desc !== '' && $origin !== '') {
+                    $profile = WRD_DB::get_profile($desc, $origin);
+                    if ($profile) {
+                        $hs = (string)($profile['hs_code'] ?? '');
+                        $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
+                        if (is_array($udj)) {
+                            $postalPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'postal'), 4);
+                            $commercialPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'commercial'), 4);
+                        }
+                    }
+                }
+
+                fputcsv($fh, [
+                    (int)$pid,
+                    (int)$parent_id,
+                    $type,
+                    $sku,
+                    $name,
+                    $variation,
+                    $desc,
+                    $origin,
+                    $hs,
+                    $postalPct,
+                    $commercialPct,
+                ]);
+            }
+            $paged++;
+            wp_reset_postdata();
+        } while (true);
+
         fclose($fh);
         exit;
     }
