@@ -900,8 +900,9 @@ class WRD_Admin {
         header('Content-Disposition: attachment; filename=wrd_products_duties_' . date('Ymd_His') . '.csv');
 
         $fh = fopen('php://output', 'w');
-        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, postal %, commercial %
-        fputcsv($fh, ['product_id','parent_id','type','sku','name','variation','customs_description','country_of_origin','hs_code','postal_rate_pct','commercial_rate_pct']);
+        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, postal (decimal), commercial (decimal)
+        // Note: rates are exported as decimal fractions (e.g., 0.053) not percentage points.
+        fputcsv($fh, ['product_id','parent_id','type','sku','name','variation','customs_description','country_of_origin','hs_code','postal_rate','commercial_rate']);
 
         $paged = 1;
         $per_page = 300;
@@ -950,16 +951,17 @@ class WRD_Admin {
                 }
 
                 $hs = '';
-                $postalPct = '';
-                $commercialPct = '';
+                $postalRate = '';
+                $commercialRate = '';
                 if ($desc !== '' && $origin !== '') {
                     $profile = WRD_DB::get_profile($desc, $origin);
                     if ($profile) {
                         $hs = (string)($profile['hs_code'] ?? '');
                         $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
                         if (is_array($udj)) {
-                            $postalPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'postal'), 4);
-                            $commercialPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'commercial'), 4);
+                            // Convert percentage points to decimal fraction for CSV (e.g., 5.3% => 0.053)
+                            $postalRate = round(WRD_Duty_Engine::compute_rate_percent($udj, 'postal') / 100.0, 6);
+                            $commercialRate = round(WRD_Duty_Engine::compute_rate_percent($udj, 'commercial') / 100.0, 6);
                         }
                     }
                 }
@@ -974,8 +976,8 @@ class WRD_Admin {
                     $desc,
                     $origin,
                     $hs,
-                    $postalPct,
-                    $commercialPct,
+                    $postalRate,
+                    $commercialRate,
                 ]);
             }
             $paged++;
