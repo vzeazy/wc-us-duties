@@ -171,15 +171,17 @@ class WRD_Frontend {
         global $product;
         if (!$product || !$product instanceof WC_Product) { return; }
         $opt = get_option(WRD_Settings::OPTION, []);
-        // Only show for US destination
+        // Only show for US destination (or if not set, indicate US)
         $dest = '';
         if (WC()->customer) {
             $dest = strtoupper((string)WC()->customer->get_shipping_country());
             if ($dest === '' || $dest === 'XX') { $dest = strtoupper((string)WC()->customer->get_billing_country()); }
         }
-        if ($dest !== 'US') { return; }
         $est = WRD_Duty_Engine::estimate_for_product($product, 1);
         if (!$est) { return; }
+        // If not US and store set to US-only estimates, skip
+        $settings = get_option(WRD_Settings::OPTION, []);
+        if (!empty($settings['us_only']) && $dest !== 'US') { return; }
 
         $label = $est['cusma'] ? __('CUSMA: duty-free to US', 'woocommerce-us-duties') : sprintf(__('Estimated US duties: %s', 'woocommerce-us-duties'), wc_price((float)$est['duty_store']));
         $rate = number_format_i18n((float)$est['rate_pct'], 2) . '%';
@@ -206,13 +208,6 @@ class WRD_Frontend {
         if ((is_cart() && !$show_cart) || (is_checkout() && !$show_checkout)) {
             return $product_name;
         }
-        // Only show for US destination
-        $dest = '';
-        if (WC()->customer) {
-            $dest = strtoupper((string)WC()->customer->get_shipping_country());
-            if ($dest === '' || $dest === 'XX') { $dest = strtoupper((string)WC()->customer->get_billing_country()); }
-        }
-        if ($dest !== 'US') { return $product_name; }
         $est = $this->get_estimate();
         if (empty($est['lines'])) { return $product_name; }
         $line = null;

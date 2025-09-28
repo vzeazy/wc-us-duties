@@ -30,6 +30,7 @@ class WRD_Settings {
             'postal_informal_threshold_usd' => 2500,
             'postal_clearance_fee_usd' => 0,
             'commercial_brokerage_flat_usd' => 0,
+            'preferred_duty_source' => 'zonos_first',
             'fx_enabled' => 1,
             'fx_provider' => 'exchangerate_host',
             'fx_refresh_hours' => 12,
@@ -77,6 +78,17 @@ class WRD_Settings {
         echo '<input type="text" name="cusma_countries" class="regular-text" value="' . esc_attr($opt['cusma_countries']) . '" /> <span class="description">' . esc_html__('Comma-separated ISO-2 list, e.g., CA,US[,MX]', 'woocommerce-us-duties') . '</span></td></tr>';
         echo '<tr><th><label>' . esc_html__('Min Split Savings (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="min_split_savings" value="' . esc_attr($opt['min_split_savings']) . '" /></td></tr>';
         echo '<tr><th><label>' . esc_html__('Postal Informal Threshold (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="postal_informal_threshold_usd" value="' . esc_attr($opt['postal_informal_threshold_usd']) . '" /></td></tr>';
+        echo '<tr><th><label>' . esc_html__('Preferred Duty Source', 'woocommerce-us-duties') . '</label></th><td><select name="preferred_duty_source">';
+        $source_options = [
+            'zonos_first' => __('Zonos first (fallback to others)', 'woocommerce-us-duties'),
+            'stallion_first' => __('Stallion first (fallback to others)', 'woocommerce-us-duties'),
+            'lowest_rate' => __('Use the lowest total rate', 'woocommerce-us-duties'),
+            'newest_data' => __('Use the newest data available', 'woocommerce-us-duties'),
+        ];
+        foreach ($source_options as $val => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($val), selected($opt['preferred_duty_source'], $val, false), esc_html($label));
+        }
+        echo '</select></td></tr>';
         echo '</tbody></table>';
 
         echo '<h2>' . esc_html__('Fees', 'woocommerce-us-duties') . '</h2>';
@@ -173,6 +185,7 @@ class WRD_Settings {
             'cusma_countries' => strtoupper(preg_replace('/\s+/', '', (string)($src['cusma_countries'] ?? 'CA,US'))),
             'min_split_savings' => (float) ($src['min_split_savings'] ?? 0),
             'postal_informal_threshold_usd' => (float) ($src['postal_informal_threshold_usd'] ?? 2500),
+            'preferred_duty_source' => in_array(($src['preferred_duty_source'] ?? 'zonos_first'), ['zonos_first','stallion_first','lowest_rate','newest_data'], true) ? $src['preferred_duty_source'] : 'zonos_first',
             'postal_clearance_fee_usd' => (float) ($src['postal_clearance_fee_usd'] ?? 0),
             'commercial_brokerage_flat_usd' => (float) ($src['commercial_brokerage_flat_usd'] ?? 0),
             'fx_enabled' => !empty($src['fx_enabled']) ? 1 : 0,

@@ -17,9 +17,11 @@ class WRD_DB {
         $sql = "CREATE TABLE {$table} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             description_raw TEXT NOT NULL,
-            description_normalized VARCHAR(255) NOT NULL,
+            description_normalized VARCHAR(512) NOT NULL,
             country_code CHAR(2) NOT NULL,
             hs_code VARCHAR(20) NOT NULL,
+            source VARCHAR(50) NOT NULL DEFAULT 'legacy',
+            last_updated DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             us_duty_json JSON NOT NULL,
             fta_flags JSON NOT NULL,
             effective_from DATE NOT NULL DEFAULT (CURRENT_DATE),
@@ -33,7 +35,7 @@ class WRD_DB {
     }
 
     public static function maybe_upgrade(): void {
-        $target = '1.1'; // bump when schema changes
+    $target = '1.3'; // bump when schema changes
         $current = get_option('wrd_us_duty_db_version');
         if ($current !== $target) {
             self::install_tables();
@@ -44,6 +46,16 @@ class WRD_DB {
     public static function normalize_description(string $s): string {
         $s = strtolower(trim($s));
         $s = preg_replace('/\s+/u', ' ', $s);
+        // Ensure it fits the DB column size (VARCHAR(512)); use mb_substr when available
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($s, 'UTF-8') > 512) {
+                $s = mb_substr($s, 0, 512, 'UTF-8');
+            }
+        } else {
+            if (strlen($s) > 512) {
+                $s = substr($s, 0, 512);
+            }
+        }
         return $s;
     }
 

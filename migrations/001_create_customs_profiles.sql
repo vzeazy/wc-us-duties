@@ -4,9 +4,11 @@
 CREATE TABLE IF NOT EXISTS `wp_wrd_customs_profiles` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `description_raw` TEXT NOT NULL,
-  `description_normalized` VARCHAR(255) NOT NULL,
+  `description_normalized` VARCHAR(512) NOT NULL,
   `country_code` CHAR(2) NOT NULL,
-  `hs_code` VARCHAR(10) NOT NULL,
+  `hs_code` VARCHAR(20) NOT NULL,
+  `source` VARCHAR(50) NOT NULL DEFAULT 'legacy',
+  `last_updated` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `us_duty_json` JSON NOT NULL,
   `fta_flags` JSON NOT NULL,
   `effective_from` DATE NOT NULL DEFAULT (CURRENT_DATE),

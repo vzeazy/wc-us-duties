@@ -41,29 +41,6 @@ class WRD_Admin {
 
         // Redirect legacy admin page slugs
         add_action('admin_init', [$this, 'redirect_legacy_pages']);
-
-        // Handle CSV exports early before any HTML is sent
-        add_action('admin_init', [$this, 'maybe_handle_exports'], 1);
-    }
-
-    /**
-     * Handle export actions as early as possible to avoid any HTML being
-     * printed before CSV headers. This prevents stray markup at the top
-     * of the downloaded CSV files.
-     */
-    public function maybe_handle_exports(): void {
-        if (!is_admin()) { return; }
-        // Only act on our admin page
-        $page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
-        if ($page !== 'wrd-customs') { return; }
-        if (empty($_GET['action'])) { return; }
-        $action = sanitize_key(wp_unslash($_GET['action']));
-        if (!current_user_can('manage_woocommerce')) { return; }
-        if ($action === 'export') {
-            $this->export_csv(); // exits
-        } elseif ($action === 'export_products') {
-            $this->export_products_csv(); // exits
-        }
     }
 
     public function product_fields(): void {
@@ -324,13 +301,13 @@ class WRD_Admin {
     echo '<a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a>';
     echo '</p>';
 
-        echo '<h2>' . esc_html__('Import JSON (Zonos dump)', 'woocommerce-us-duties') . '</h2>';
+    echo '<h2>' . esc_html__('Import Duties JSON File', 'woocommerce-us-duties') . '</h2>';
         echo '<form method="post" enctype="multipart/form-data" style="margin-top:8px;">';
         wp_nonce_field('wrd_import_json', 'wrd_import_json_nonce');
         echo '<p><input type="file" name="wrd_json" accept="application/json,.json" required /></p>';
         echo '<p><label>Effective From <input type="date" name="effective_from" value="' . esc_attr(date('Y-m-d')) . '" required /></label></p>';
-        echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same description|country and date', 'woocommerce-us-duties') . '</label></p>';
-        echo '<p><label>Notes (optional)<br/><input type="text" name="notes" class="regular-text" placeholder="Imported from Zonos" /></label></p>';
+    echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same description, country, and date', 'woocommerce-us-duties') . '</label></p>';
+    echo '<p><label>Notes (optional)<br/><input type="text" name="notes" class="regular-text" placeholder="Imported duties file" /></label></p>';
         submit_button(__('Import JSON', 'woocommerce-us-duties'));
         echo '</form>';
 
@@ -340,9 +317,9 @@ class WRD_Admin {
             echo '<div class="updated"><p>' . esc_html__('Profiles CSV import completed.', 'woocommerce-us-duties') . '</p></div>';
         }
 
-        // Handle Zonos JSON import
+        // Handle duties JSON import
         if (!empty($_POST['wrd_import_json_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_import_json_nonce'])), 'wrd_import_json')) {
-            $json_summary = $this->handle_zonos_json_import();
+            $json_summary = $this->handle_duty_json_import();
             if (is_array($json_summary)) {
                 echo '<div class="notice notice-info"><p>' . esc_html(sprintf(
                     /* translators: 1: inserted count, 2: updated count, 3: skipped count, 4: errors count */
@@ -693,59 +670,108 @@ class WRD_Admin {
         fclose($fh);
     }
 
-    private function handle_zonos_json_import(): ?array {
+    private function handle_duty_json_import(): ?array {
         if (empty($_FILES['wrd_json']) || !is_uploaded_file($_FILES['wrd_json']['tmp_name'])) { return null; }
         $json = file_get_contents($_FILES['wrd_json']['tmp_name']);
         if ($json === false) { return null; }
         $data = json_decode($json, true);
-        if (!is_array($data)) { return ['inserted'=>0,'updated'=>0,'skipped'=>0,'errors'=>1]; }
+        $counters = ['inserted'=>0,'updated'=>0,'skipped'=>0,'errors'=>0, 'error_messages'=>[]];
+        if (!is_array($data)) {
+            $counters['errors'] = 1;
+            $counters['error_messages'][] = 'Invalid JSON structure: expected object at root.';
+            return $counters;
+        }
+
+        $duties = isset($data['duties']) ? $data['duties'] : null;
+        if (!is_array($duties)) {
+            $counters['errors'] = 1;
+            $counters['error_messages'][] = 'Invalid duties JSON: missing duties array.';
+            return $counters;
+        }
 
         $effective_from = isset($_POST['effective_from']) ? sanitize_text_field(wp_unslash($_POST['effective_from'])) : date('Y-m-d');
         $replace = !empty($_POST['replace_existing']);
-        $notes = isset($_POST['notes']) ? wp_kses_post(wp_unslash($_POST['notes'])) : 'Imported from Zonos';
+        $notes = isset($_POST['notes']) ? wp_kses_post(wp_unslash($_POST['notes'])) : '';
+        $sourceRaw = isset($data['source']) ? (string)$data['source'] : '';
+        $fileSource = $this->normalize_profile_source($sourceRaw);
+        if ($notes === '') {
+            $notes = $sourceRaw !== '' ? sprintf('Imported from %s duties file', sanitize_text_field($sourceRaw)) : 'Imported duties file';
+        }
 
         global $wpdb; $table = WRD_DB::table_profiles();
-        $counters = ['inserted'=>0,'updated'=>0,'skipped'=>0,'errors'=>0, 'error_messages'=>[]];
 
-        foreach ($data as $key => $entry) {
-            // Expect key format: Description|CC
-            $parts = explode('|', (string)$key, 2);
-            if (count($parts) !== 2) { $counters['skipped']++; continue; }
-            [$description, $country] = $parts;
-            $description = trim((string)$description);
-            $country = strtoupper(trim((string)$country));
-            if ($description === '' || $country === '') { $counters['skipped']++; continue; }
+        foreach ($duties as $index => $entry) {
+            if (!is_array($entry)) {
+                $counters['skipped']++;
+                $counters['error_messages'][] = sprintf('Entry %s is not an object.', (string)$index);
+                continue;
+            }
 
-            $hs = (string)($entry['hs_code'] ?? '');
-            // Accept dotted HS (e.g., 5607.49.1500). Keep raw, but also ensure length fits schema.
+            $description = trim((string)($entry['description'] ?? ''));
+            $country = strtoupper(trim((string)($entry['originCountry'] ?? '')));
+            if ($description === '' || $country === '') {
+                $counters['skipped']++;
+                $counters['error_messages'][] = sprintf('Entry %s missing description or originCountry.', (string)$index);
+                continue;
+            }
+
+            $hs = (string)($entry['hsCode'] ?? '');
             if (strlen($hs) > 20) { $hs = substr($hs, 0, 20); }
 
-            // Build us_duty_json preserving channels present
-            $udj = [];
-            foreach (['postal','commercial'] as $ch) {
-                if (!empty($entry[$ch]['rates']) && is_array($entry[$ch]['rates'])) {
-                    $udj[$ch] = [ 'rates' => (object)$entry[$ch]['rates'] ];
+            $entrySource = isset($entry['source']) ? $this->normalize_profile_source((string)$entry['source']) : $fileSource;
+
+            $us_duty_rates = [];
+            $fta_flags = [];
+            if (isset($entry['tariffs']) && is_array($entry['tariffs'])) {
+                foreach ($entry['tariffs'] as $tariffIndex => $tariff) {
+                    if (!is_array($tariff)) { continue; }
+                    if (!isset($tariff['rate']) || !is_numeric($tariff['rate'])) { continue; }
+
+                    $rate_value = (float)$tariff['rate'];
+                    $rate_label = isset($tariff['description']) ? (string)$tariff['description'] : '';
+                    $fallback_key = isset($tariff['code']) ? (string)$tariff['code'] : '';
+                    $rate_key_raw = $rate_label !== '' ? $rate_label : $fallback_key;
+                    $rate_key = sanitize_key($rate_key_raw);
+                    if ($rate_key === '') {
+                        $rate_key = 'rate_' . substr(md5($rate_key_raw . $tariffIndex), 0, 8);
+                    }
+                    $us_duty_rates[$rate_key] = $rate_value;
+
+                    $tariff_type = isset($tariff['type']) ? strtoupper((string)$tariff['type']) : '';
+                    $tariff_code = isset($tariff['code']) ? strtoupper((string)$tariff['code']) : '';
+                    if ($tariff_type === 'CUSMA_ELIGIBLE' || $tariff_code === 'CUSMA') {
+                        if (!in_array('CUSMA', $fta_flags, true)) {
+                            $fta_flags[] = 'CUSMA';
+                        }
+                    }
                 }
             }
 
+            $us_duty_json_data = [
+                'postal' => ['rates' => (object)$us_duty_rates],
+                'commercial' => ['rates' => (object)$us_duty_rates],
+            ];
+
             $descNorm = WRD_DB::normalize_description($description);
-            $fta = [];
+            $lastUpdated = current_time('mysql');
+            $fta_flags = array_values(array_unique($fta_flags));
             $dataRow = [
                 'description_raw' => $description,
                 'description_normalized' => $descNorm,
                 'country_code' => $country,
                 'hs_code' => $hs,
-                'us_duty_json' => wp_json_encode($udj, JSON_UNESCAPED_SLASHES),
-                'fta_flags' => wp_json_encode($fta),
+                'source' => $entrySource,
+                'last_updated' => $lastUpdated,
+                'us_duty_json' => wp_json_encode($us_duty_json_data, JSON_UNESCAPED_SLASHES),
+                'fta_flags' => wp_json_encode($fta_flags),
                 'effective_from' => $effective_from,
                 'effective_to' => null,
                 'notes' => $notes,
             ];
 
-            // Upsert logic on (desc_norm, country, effective_from)
             $existing_id = (int)$wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM {$table} WHERE description_normalized=%s AND country_code=%s AND effective_from=%s LIMIT 1",
-                $descNorm, $country, $effective_from
+                "SELECT id FROM {$table} WHERE description_normalized=%s AND country_code=%s AND effective_from=%s AND source=%s LIMIT 1",
+                $descNorm, $country, $effective_from, $entrySource
             ));
 
             if ($existing_id > 0) {
@@ -762,6 +788,15 @@ class WRD_Admin {
         }
 
         return $counters;
+    }
+
+    private function normalize_profile_source(string $source): string {
+        $normalized = strtolower(trim($source));
+        $normalized = preg_replace('/[^a-z0-9_\-]/', '', $normalized);
+        if ($normalized === '') {
+            return 'legacy';
+        }
+        return $normalized;
     }
 
     private function render_profile_form(): void {
@@ -847,10 +882,6 @@ class WRD_Admin {
 
     private function export_csv(): void {
         if (!current_user_can('manage_woocommerce')) { return; }
-        // Ensure no stray output before headers
-        if (function_exists('ob_get_level')) {
-            while (ob_get_level() > 0) { @ob_end_clean(); }
-        }
         nocache_headers();
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename=wrd_customs_profiles_' . date('Ymd_His') . '.csv');
@@ -891,18 +922,13 @@ class WRD_Admin {
         if (!current_user_can('manage_woocommerce')) { return; }
         // Stream CSV of all products and variations with HS code and postal/commercial duty rates
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
-        // Ensure no stray output before headers
-        if (function_exists('ob_get_level')) {
-            while (ob_get_level() > 0) { @ob_end_clean(); }
-        }
         nocache_headers();
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename=wrd_products_duties_' . date('Ymd_His') . '.csv');
 
         $fh = fopen('php://output', 'w');
-        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, postal (decimal), commercial (decimal)
-        // Note: rates are exported as decimal fractions (e.g., 0.053) not percentage points.
-        fputcsv($fh, ['product_id','parent_id','type','sku','name','variation','customs_description','country_of_origin','hs_code','postal_rate','commercial_rate']);
+        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, postal %, commercial %
+        fputcsv($fh, ['product_id','parent_id','type','sku','name','variation','customs_description','country_of_origin','hs_code','postal_rate_pct','commercial_rate_pct']);
 
         $paged = 1;
         $per_page = 300;
@@ -951,17 +977,16 @@ class WRD_Admin {
                 }
 
                 $hs = '';
-                $postalRate = '';
-                $commercialRate = '';
+                $postalPct = '';
+                $commercialPct = '';
                 if ($desc !== '' && $origin !== '') {
                     $profile = WRD_DB::get_profile($desc, $origin);
                     if ($profile) {
                         $hs = (string)($profile['hs_code'] ?? '');
                         $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
                         if (is_array($udj)) {
-                            // Convert percentage points to decimal fraction for CSV (e.g., 5.3% => 0.053)
-                            $postalRate = round(WRD_Duty_Engine::compute_rate_percent($udj, 'postal') / 100.0, 6);
-                            $commercialRate = round(WRD_Duty_Engine::compute_rate_percent($udj, 'commercial') / 100.0, 6);
+                            $postalPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'postal'), 4);
+                            $commercialPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'commercial'), 4);
                         }
                     }
                 }
@@ -976,8 +1001,8 @@ class WRD_Admin {
                     $desc,
                     $origin,
                     $hs,
-                    $postalRate,
-                    $commercialRate,
+                    $postalPct,
+                    $commercialPct,
                 ]);
             }
             $paged++;
