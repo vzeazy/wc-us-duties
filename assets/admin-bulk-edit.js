@@ -99,7 +99,14 @@
 
         validateBulkSubmission: function(e) {
             var $form = $(this);
-            
+
+            // Skip validation for search submissions
+            var isSearchSubmit = $form.find('input[name="s"]').length > 0 &&
+                                 $form.find('input[name="s"]').val() !== '';
+            if (isSearchSubmit) {
+                return true;
+            }
+
             // Only run validation when the bulk edit Update button initiated the submit
             var isBulkSubmit = $form.data('wrdBulkSubmit') === true;
             // Fallback: if user presses Enter within the bulk edit panel with actions chosen
@@ -115,7 +122,7 @@
                     }
                 }
             }
-            
+
             // Only validate if this is a bulk edit submission
             if (!isBulkSubmit) {
                 return true;

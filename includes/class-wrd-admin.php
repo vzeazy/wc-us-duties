@@ -333,9 +333,17 @@ class WRD_Admin {
         wp_nonce_field('wrd_import_json', 'wrd_import_json_nonce');
         echo '<p><input type="file" name="wrd_json" accept="application/json,.json" required /></p>';
         echo '<p><label>Effective From <input type="date" name="effective_from" value="' . esc_attr(date('Y-m-d')) . '" required /></label></p>';
-    echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same description, country, and date', 'woocommerce-us-duties') . '</label></p>';
+    echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same HS code, country, and date', 'woocommerce-us-duties') . '</label></p>';
     echo '<p><label>Notes (optional)<br/><input type="text" name="notes" class="regular-text" placeholder="Imported duties file" /></label></p>';
         submit_button(__('Import JSON', 'woocommerce-us-duties'));
+        echo '</form>';
+
+        echo '<h2>' . esc_html__('Cleanup Duplicate Profiles', 'woocommerce-us-duties') . '</h2>';
+        echo '<p>' . esc_html__('Merge duplicate profiles that have the same HS code and country code. Product assignments will be preserved and moved to the canonical profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post" style="margin-top:8px;">';
+        wp_nonce_field('wrd_cleanup_duplicates', 'wrd_cleanup_nonce');
+        echo '<p><label><input type="checkbox" name="cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Find & Merge Duplicates', 'woocommerce-us-duties'), 'secondary');
         echo '</form>';
 
         // Handle Profiles CSV import
@@ -369,6 +377,25 @@ class WRD_Admin {
                 )) . '</p>';
                 if (!empty($json_summary['error_messages'])) {
                     echo '<details><summary>' . esc_html__('Error details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:220px;overflow:auto;">' . esc_html(implode("\n", array_slice((array)$json_summary['error_messages'], 0, 50))) . '</pre></details>';
+                }
+                echo '</div>';
+            }
+        }
+
+        // Handle duplicate cleanup
+        if (!empty($_POST['wrd_cleanup_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_cleanup_nonce'])), 'wrd_cleanup_duplicates')) {
+            $cleanup_summary = $this->handle_duplicate_cleanup();
+            if (is_array($cleanup_summary)) {
+                echo '<div class="notice notice-success"><p>' . esc_html(sprintf(
+                    __('Cleanup: %1$d duplicates found, %2$d merged, %3$d products reassigned, %4$d profiles deleted. (dry-run: %5$s)', 'woocommerce-us-duties'),
+                    (int)($cleanup_summary['duplicates_found'] ?? 0),
+                    (int)($cleanup_summary['merged'] ?? 0),
+                    (int)($cleanup_summary['products_reassigned'] ?? 0),
+                    (int)($cleanup_summary['profiles_deleted'] ?? 0),
+                    !empty($cleanup_summary['dry_run']) ? 'yes' : 'no'
+                )) . '</p>';
+                if (!empty($cleanup_summary['messages'])) {
+                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:300px;overflow:auto;">' . esc_html(implode("\n", (array)$cleanup_summary['messages'])) . '</pre></details>';
                 }
                 echo '</div>';
             }
@@ -970,9 +997,10 @@ class WRD_Admin {
                 'notes' => $notes,
             ];
 
+            // Match by HS code + country (description is fluid and can change)
             $existing_id = (int)$wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM {$table} WHERE description_normalized=%s AND country_code=%s AND effective_from=%s AND source=%s LIMIT 1",
-                $descNorm, $country, $effective_from, $entrySource
+                "SELECT id FROM {$table} WHERE hs_code=%s AND country_code=%s AND effective_from=%s LIMIT 1",
+                $hs, $country, $effective_from
             ));
 
             if ($existing_id > 0) {
@@ -998,6 +1026,136 @@ class WRD_Admin {
             return 'legacy';
         }
         return $normalized;
+    }
+
+    private function handle_duplicate_cleanup(): array {
+        $dry_run = !empty($_POST['cleanup_dry_run']);
+        global $wpdb;
+        $table = WRD_DB::table_profiles();
+
+        $summary = [
+            'duplicates_found' => 0,
+            'merged' => 0,
+            'products_reassigned' => 0,
+            'profiles_deleted' => 0,
+            'dry_run' => $dry_run,
+            'messages' => [],
+        ];
+
+        // Find all profiles grouped by HS code + country code
+        $sql = "SELECT hs_code, country_code, COUNT(*) as cnt, GROUP_CONCAT(id ORDER BY id ASC) as ids
+                FROM {$table}
+                WHERE hs_code != ''
+                GROUP BY hs_code, country_code
+                HAVING cnt > 1
+                ORDER BY cnt DESC, hs_code ASC";
+
+        $duplicates = $wpdb->get_results($sql, ARRAY_A);
+
+        if (empty($duplicates)) {
+            $summary['messages'][] = 'No duplicates found.';
+            return $summary;
+        }
+
+        $summary['duplicates_found'] = count($duplicates);
+        $summary['messages'][] = sprintf('Found %d groups of duplicate profiles.', count($duplicates));
+
+        foreach ($duplicates as $dup_group) {
+            $hs_code = $dup_group['hs_code'];
+            $country = $dup_group['country_code'];
+            $count = (int)$dup_group['cnt'];
+            $ids = array_map('intval', explode(',', $dup_group['ids']));
+
+            if (empty($ids) || count($ids) < 2) {
+                continue;
+            }
+
+            // The canonical profile is the one with the lowest ID (oldest)
+            $canonical_id = $ids[0];
+            $duplicate_ids = array_slice($ids, 1);
+
+            $summary['messages'][] = sprintf(
+                'HS: %s, Country: %s - Merging %d duplicates into profile #%d',
+                $hs_code,
+                $country,
+                count($duplicate_ids),
+                $canonical_id
+            );
+
+            // Find all products currently assigned to duplicate profiles
+            // Products are linked via _wrd_desc_norm + _wrd_origin_cc meta
+            foreach ($duplicate_ids as $dup_id) {
+                // Get the profile data
+                $profile = $wpdb->get_row($wpdb->prepare(
+                    "SELECT * FROM {$table} WHERE id = %d",
+                    $dup_id
+                ), ARRAY_A);
+
+                if (!$profile) {
+                    continue;
+                }
+
+                $desc_norm = $profile['description_normalized'];
+
+                // Find products using this description + country combination
+                $product_ids = $wpdb->get_col($wpdb->prepare(
+                    "SELECT DISTINCT pm1.post_id
+                     FROM {$wpdb->postmeta} pm1
+                     INNER JOIN {$wpdb->postmeta} pm2 ON pm1.post_id = pm2.post_id
+                     INNER JOIN {$wpdb->posts} p ON pm1.post_id = p.ID
+                     WHERE pm1.meta_key = '_wrd_desc_norm' AND pm1.meta_value = %s
+                       AND pm2.meta_key = '_wrd_origin_cc' AND pm2.meta_value = %s
+                       AND p.post_type IN ('product', 'product_variation')
+                       AND p.post_status NOT IN ('trash', 'auto-draft')",
+                    $desc_norm,
+                    $country
+                ));
+
+                if (!empty($product_ids)) {
+                    // Get the canonical profile's description
+                    $canonical_profile = $wpdb->get_row($wpdb->prepare(
+                        "SELECT * FROM {$table} WHERE id = %d",
+                        $canonical_id
+                    ), ARRAY_A);
+
+                    $canonical_desc_norm = $canonical_profile['description_normalized'];
+
+                    $summary['messages'][] = sprintf(
+                        '  → Found %d products with desc_norm "%s" and country "%s"',
+                        count($product_ids),
+                        $desc_norm,
+                        $country
+                    );
+
+                    if (!$dry_run) {
+                        // Update products to use canonical profile's normalized description
+                        foreach ($product_ids as $product_id) {
+                            update_post_meta($product_id, '_wrd_desc_norm', $canonical_desc_norm);
+                            $summary['products_reassigned']++;
+                        }
+                    } else {
+                        $summary['products_reassigned'] += count($product_ids);
+                    }
+                }
+
+                // Delete the duplicate profile
+                if (!$dry_run) {
+                    $wpdb->delete($table, ['id' => $dup_id]);
+                    $summary['profiles_deleted']++;
+                } else {
+                    $summary['profiles_deleted']++;
+                }
+            }
+
+            $summary['merged']++;
+        }
+
+        if ($dry_run) {
+            $summary['messages'][] = '';
+            $summary['messages'][] = 'DRY RUN - No changes made. Uncheck "Dry run" to apply changes.';
+        }
+
+        return $summary;
     }
 
     private function render_profile_form(): void {
