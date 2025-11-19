@@ -745,17 +745,17 @@ class WRD_Admin {
         if (!current_user_can('manage_woocommerce')) { wp_send_json_error(['message' => 'forbidden'], 403); }
         check_ajax_referer('wrd_reconcile_nonce', 'nonce');
         $pid = isset($_POST['product_id']) ? (int) $_POST['product_id'] : 0;
-        $desc = isset($_POST['desc']) ? wp_kses_post(wp_unslash($_POST['desc'])) : '';
+        $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
         $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
-        if ($pid <= 0 || $desc === '' || $cc === '') { wp_send_json_error(['message' => 'invalid_params'], 400); }
+        if ($pid <= 0 || $hs_code === '' || $cc === '') { wp_send_json_error(['message' => 'invalid_params'], 400); }
         $product = wc_get_product($pid);
         if (!$product) { wp_send_json_error(['message' => 'not_found'], 404); }
-        $product->update_meta_data('_customs_description', $desc);
+        $product->update_meta_data('_hs_code', $hs_code);
         $product->update_meta_data('_country_of_origin', $cc);
         // Optionally store a direct profile link if available
-        $pid_link = WRD_DB::find_active_profile_id($desc, $cc);
-        if ($pid_link > 0) {
-            $product->update_meta_data('_wrd_profile_id', (int)$pid_link);
+        $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
+        if ($profile && isset($profile['id'])) {
+            $product->update_meta_data('_wrd_profile_id', (int)$profile['id']);
         }
         $product->save();
         if ($product->is_type('variation')) {
@@ -764,7 +764,6 @@ class WRD_Admin {
             $this->update_normalized_meta_for_product($pid);
         }
         // Return a small payload with status and maybe matched profile data
-        $profile = WRD_DB::get_profile($desc, $cc);
         $ratePostal = 0.0; $rateComm = 0.0;
         if ($profile && is_array($profile)) {
             $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
@@ -776,21 +775,21 @@ class WRD_Admin {
         wp_send_json_success(['postal_rate' => $ratePostal, 'commercial_rate' => $rateComm]);
     }
 
-    // Suggest top N profiles for a product by desc similarity and same origin
+    // Suggest top N profiles for a product by HS code similarity and same origin
     public function ajax_reconcile_suggest() {
         if (!current_user_can('manage_woocommerce')) { wp_send_json_error(['message' => 'forbidden'], 403); }
         check_ajax_referer('wrd_reconcile_nonce', 'nonce');
-        $desc = isset($_GET['desc']) ? (string) wp_unslash($_GET['desc']) : '';
+        $hs_code = isset($_GET['hs_code']) ? sanitize_text_field(wp_unslash($_GET['hs_code'])) : '';
         $cc = isset($_GET['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_GET['cc']))) : '';
-        if ($desc === '' || $cc === '') { wp_send_json_success([]); }
+        if ($hs_code === '' || $cc === '') { wp_send_json_success([]); }
         global $wpdb; $table = WRD_DB::table_profiles();
-        $like = '%' . $wpdb->esc_like(WRD_DB::normalize_description($desc)) . '%';
+        $like = '%' . $wpdb->esc_like($hs_code) . '%';
         $now = current_time('mysql');
         $sql = $wpdb->prepare(
             "SELECT id, description_raw, country_code, hs_code
              FROM {$table}
              WHERE country_code=%s
-               AND description_normalized LIKE %s
+               AND hs_code LIKE %s
                AND (effective_from IS NULL OR effective_from <= DATE(%s))
                AND (effective_to IS NULL OR effective_to >= DATE(%s))
              ORDER BY last_updated DESC
@@ -800,10 +799,13 @@ class WRD_Admin {
         $rows = $wpdb->get_results($sql, ARRAY_A);
         $out = [];
         foreach ($rows as $r) {
+            $hs = $r['hs_code'] ?: '';
+            $desc = $r['description_raw'] ?: '';
+            $label = $hs ? ($hs . ' (' . strtoupper($r['country_code']) . '): ' . $desc) : ($desc . ' (' . strtoupper($r['country_code']) . ')');
             $out[] = [
                 'id' => (int)$r['id'],
-                'label' => $r['description_raw'] . ' (' . strtoupper($r['country_code']) . ')' . ($r['hs_code'] ? ' — HS ' . $r['hs_code'] : ''),
-                'desc' => $r['description_raw'],
+                'label' => $label,
+                'hs' => $hs,
                 'cc' => strtoupper($r['country_code']),
             ];
         }

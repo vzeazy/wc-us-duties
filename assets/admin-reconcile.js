@@ -15,20 +15,20 @@
         select: function(e, ui){
           var $wrap = $input.closest('.wrd-assign');
           if (ui && ui.item){
-            $wrap.find('input.wrd-desc').val(ui.item.desc || '');
+            $wrap.find('input.wrd-hs').val(ui.item.hs || '');
             $wrap.find('input.wrd-cc').val(ui.item.cc || '');
           }
         }
       });
 
-      // On focus, fetch suggestions based on current desc/cc if input is empty
+      // On focus, fetch suggestions based on current hs_code/cc if input is empty
       $input.on('focus', function(){
         if ($input.val()) return;
         var $wrap = $input.closest('.wrd-assign');
-        var desc = $wrap.find('input.wrd-desc').val();
+        var hs_code = $wrap.find('input.wrd-hs').val();
         var cc = $wrap.find('input.wrd-cc').val();
-        if (!desc || !cc) return;
-        $.getJSON(WRDReconcile.ajax, { action: 'wrd_reconcile_suggest', nonce: WRDReconcile.nonce, desc: desc, cc: cc }, function(resp){
+        if (!hs_code || !cc) return;
+        $.getJSON(WRDReconcile.ajax, { action: 'wrd_reconcile_suggest', nonce: WRDReconcile.nonce, hs_code: hs_code, cc: cc }, function(resp){
           if (resp && resp.success && resp.data && resp.data.length){
             // Populate autocomplete menu immediately
             $input.autocomplete('option', 'source', resp.data);
@@ -43,7 +43,7 @@
     $(context).on('click', '.wrd-assign .wrd-apply', function(){
       var $wrap = $(this).closest('.wrd-assign');
       var pid = $wrap.data('product');
-      var desc = $wrap.find('input.wrd-desc').val();
+      var hs_code = $wrap.find('input.wrd-hs').val();
       var cc = $wrap.find('input.wrd-cc').val();
       var $status = $wrap.find('.wrd-status');
       $status.text('…');
@@ -51,7 +51,7 @@
         action: 'wrd_reconcile_assign',
         nonce: WRDReconcile.nonce,
         product_id: pid,
-        desc: desc,
+        hs_code: hs_code,
         cc: cc
       }).done(function(resp){
         if (resp && resp.success){
