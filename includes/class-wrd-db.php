@@ -85,6 +85,32 @@ class WRD_DB {
         return $row;
     }
 
+    public static function get_profile_by_hs_country(string $hsCode, string $countryCode): ?array {
+        if ($hsCode === '' || $countryCode === '') { return null; }
+        global $wpdb;
+        $table = self::table_profiles();
+        $country = strtoupper($countryCode);
+        $now = current_time('mysql');
+        $sql = $wpdb->prepare(
+            "SELECT * FROM {$table}
+             WHERE hs_code = %s AND country_code = %s
+               AND (effective_from IS NULL OR effective_from <= DATE(%s))
+               AND (effective_to IS NULL OR effective_to >= DATE(%s))
+             ORDER BY effective_from DESC
+             LIMIT 1",
+            $hsCode, $country, $now, $now
+        );
+        $row = $wpdb->get_row($sql, ARRAY_A);
+        if (!$row) { return null; }
+        // decode JSON columns
+        foreach (['us_duty_json','fta_flags'] as $col) {
+            if (isset($row[$col]) && is_string($row[$col])) {
+                $row[$col] = json_decode($row[$col], true);
+            }
+        }
+        return $row;
+    }
+
     public static function get_profile_by_id(int $id): ?array {
         if ($id <= 0) { return null; }
         global $wpdb; $table = self::table_profiles();

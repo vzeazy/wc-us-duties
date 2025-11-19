@@ -14,8 +14,9 @@
         select: function(e, ui){
           var item = ui.item || {};
           var $wrap = $input.closest('.inline-edit-col, .wrd-customs-inline, .inline-edit-row');
-          $wrap.find('input[name="wrd_customs_description"]').val(item.desc || '');
+          $wrap.find('input[name="wrd_hs_code"]').val(item.hs || '');
           $wrap.find('input[name="wrd_country_of_origin"]').val(item.cc || '');
+          $wrap.find('input[name="wrd_customs_description"]').val(item.desc || '');
         }
       });
     });

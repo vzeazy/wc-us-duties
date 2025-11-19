@@ -129,26 +129,50 @@ class WRD_Duty_Engine {
             $value = (float) $product->get_price() * $qty; // store currency
             $valueUsd = self::to_usd($value, $currency);
 
-            $desc = $product->get_meta('_customs_description', true);
+            // Get HS code and origin from product
+            $hs_code = $product->get_meta('_hs_code', true);
             $origin = $product->get_meta('_country_of_origin', true);
-            if ($origin === '' && $product->is_type('variation')) {
+
+            // Fallback to legacy _customs_description for backward compatibility
+            $desc = $product->get_meta('_customs_description', true);
+
+            if ($product->is_type('variation')) {
                 $parent = wc_get_product($product->get_parent_id());
                 if ($parent) {
-                    $origin = $parent->get_meta('_country_of_origin', true) ?: $origin;
-                    $desc = $desc ?: $parent->get_meta('_customs_description', true);
+                    if ($origin === '') {
+                        $origin = $parent->get_meta('_country_of_origin', true) ?: $origin;
+                    }
+                    if ($hs_code === '') {
+                        $hs_code = $parent->get_meta('_hs_code', true) ?: $hs_code;
+                    }
+                    if ($desc === '') {
+                        $desc = $parent->get_meta('_customs_description', true) ?: $desc;
+                    }
                 }
             }
+
             // Normalize
+            $hs_code = is_string($hs_code) ? trim($hs_code) : '';
             $desc = is_string($desc) ? trim($desc) : '';
             $origin = is_string($origin) ? strtoupper(trim($origin)) : '';
-            // Prefer direct profile link if available
+
+            // Lookup profile: prefer HS code + country, fallback to description + country
             $profile = null;
             $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
             if ($profile_id > 0) {
                 $profile = WRD_DB::get_profile_by_id($profile_id);
             }
+            if (!$profile && $hs_code && $origin) {
+                $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            }
             if (!$profile && $desc && $origin) {
+                // Legacy fallback for products still using description
                 $profile = WRD_DB::get_profile($desc, $origin);
+            }
+
+            // If we found a profile and product doesn't have description, pull it from profile
+            if ($profile && !$desc && isset($profile['description_raw'])) {
+                $desc = $profile['description_raw'];
             }
             if (!$profile) { $missingProfiles++; }
             $channel = $overrideData ? $overrideData['channel'] : ($origin ? self::decide_channel($origin) : 'commercial');
@@ -236,18 +260,34 @@ class WRD_Duty_Engine {
         if (!$product instanceof \WC_Product) { return null; }
         $settings = get_option(WRD_Settings::OPTION, []);
         $currency = self::current_currency();
-    $desc = $product->get_meta('_customs_description', true);
-    $origin = $product->get_meta('_country_of_origin', true);
-        if ($origin === '' && $product->is_type('variation')) {
+        // Get HS code and origin from product
+        $hs_code = $product->get_meta('_hs_code', true);
+        $origin = $product->get_meta('_country_of_origin', true);
+
+        // Fallback to legacy _customs_description for backward compatibility
+        $desc = $product->get_meta('_customs_description', true);
+
+        if ($product->is_type('variation')) {
             $parent = wc_get_product($product->get_parent_id());
             if ($parent) {
-                $origin = $parent->get_meta('_country_of_origin', true) ?: $origin;
-                $desc = $desc ?: $parent->get_meta('_customs_description', true);
+                if ($origin === '') {
+                    $origin = $parent->get_meta('_country_of_origin', true) ?: $origin;
+                }
+                if ($hs_code === '') {
+                    $hs_code = $parent->get_meta('_hs_code', true) ?: $hs_code;
+                }
+                if ($desc === '') {
+                    $desc = $parent->get_meta('_customs_description', true) ?: $desc;
+                }
             }
         }
+
+        $hs_code = is_string($hs_code) ? trim($hs_code) : '';
         $desc = is_string($desc) ? trim($desc) : '';
         $origin = is_string($origin) ? strtoupper(trim($origin)) : '';
-        if ($desc === '' || $origin === '') { return null; }
+
+        // Need at least origin; HS code is preferred but desc can be fallback
+        if ($origin === '' || ($hs_code === '' && $desc === '')) { return null; }
 
         // Destination
         $dest = '';
@@ -266,12 +306,24 @@ class WRD_Duty_Engine {
             $channel = self::decide_channel($origin);
         }
 
-        // Profile and rate
-    // Prefer direct profile link if available
-    $profile = null;
-    $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
-    if ($profile_id > 0) { $profile = WRD_DB::get_profile_by_id($profile_id); }
-    if (!$profile) { $profile = WRD_DB::get_profile($desc, $origin); }
+        // Profile and rate - prefer HS code + country, fallback to description
+        $profile = null;
+        $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
+        if ($profile_id > 0) {
+            $profile = WRD_DB::get_profile_by_id($profile_id);
+        }
+        if (!$profile && $hs_code && $origin) {
+            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+        }
+        if (!$profile && $desc && $origin) {
+            // Legacy fallback for products still using description
+            $profile = WRD_DB::get_profile($desc, $origin);
+        }
+
+        // If we found a profile and product doesn't have description, pull it from profile
+        if ($profile && !$desc && isset($profile['description_raw'])) {
+            $desc = $profile['description_raw'];
+        }
         $ratePct = $profile ? self::compute_rate_percent($profile['us_duty_json'], $channel) : 0.0;
 
         // CUSMA

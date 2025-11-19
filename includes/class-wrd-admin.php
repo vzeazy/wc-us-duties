@@ -46,51 +46,92 @@ class WRD_Admin {
     }
 
     public function product_fields(): void {
-        echo '<div class="options_group">';
+        global $post;
+        $product = wc_get_product($post->ID);
+        if (!$product) { return; }
+
+        echo '<div class="options_group wrd-customs-fields">';
+
+        // Profile autocomplete lookup field
+        echo '<p class="form-field">';
+        echo '<label>' . esc_html__('Profile Lookup', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search profiles...', 'woocommerce-us-duties') . '" />';
+        echo '<span class="description">' . esc_html__('Search by HS code, country, or description to auto-populate fields below.', 'woocommerce-us-duties') . '</span>';
+        echo '</p>';
+
+        // HS Code field (primary identifier)
         woocommerce_wp_text_input([
-            'id' => '_customs_description',
-            'label' => __('Customs Description', 'woocommerce-us-duties'),
+            'id' => '_hs_code',
+            'label' => __('HS Code', 'woocommerce-us-duties'),
             'desc_tip' => true,
-            'description' => __('Commercial description used for customs profile lookup.', 'woocommerce-us-duties'),
+            'description' => __('Harmonized System code for this product (primary identifier for duty lookup).', 'woocommerce-us-duties'),
+            'placeholder' => '4016931000',
         ]);
+
+        // Country of Origin
         woocommerce_wp_text_input([
             'id' => '_country_of_origin',
             'label' => __('Country of Origin (ISO-2)', 'woocommerce-us-duties'),
             'desc_tip' => true,
             'description' => __('ISO-2 country code, e.g., CA, CN, TW.', 'woocommerce-us-duties'),
-            'placeholder' => 'CA',
+            'placeholder' => 'CN',
             'maxlength' => 2,
         ]);
+
         echo '</div>';
+
+        // Enqueue autocomplete script
+        wp_enqueue_script('wrd-product-edit', WRD_US_DUTY_URL . 'assets/admin-product-edit.js', ['jquery', 'jquery-ui-autocomplete'], WRD_US_DUTY_VERSION, true);
+        wp_localize_script('wrd-product-edit', 'WRDProduct', [
+            'ajax' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('wrd_search_profiles'),
+        ]);
     }
 
     public function save_product_fields($product): void {
-        $desc = isset($_POST['_customs_description']) ? wp_kses_post(wp_unslash($_POST['_customs_description'])) : '';
+        $hs_code = isset($_POST['_hs_code']) ? trim(sanitize_text_field(wp_unslash($_POST['_hs_code']))) : '';
         $origin = isset($_POST['_country_of_origin']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['_country_of_origin']))) : '';
-        $product->update_meta_data('_customs_description', $desc);
+
+        $product->update_meta_data('_hs_code', $hs_code);
         $product->update_meta_data('_country_of_origin', $origin);
         $product->save();
+
         // Update normalized meta on product and inheriting variations
         $this->update_normalized_meta_for_product((int)$product->get_id());
     }
 
     public function variation_fields($loop, $variation_data, $variation): void {
+        echo '<div class="wrd-variation-customs-fields">';
+
+        // Profile lookup for variation
+        echo '<p class="form-row form-row-full">';
+        echo '<label>' . esc_html__('Profile Lookup', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search profiles...', 'woocommerce-us-duties') . '" />';
+        echo '</p>';
+
         woocommerce_wp_text_input([
-            'id' => "_customs_description[{$loop}]",
-            'label' => __('Customs Description', 'woocommerce-us-duties'),
-            'value' => get_post_meta($variation->ID, '_customs_description', true),
+            'id' => "_hs_code[{$loop}]",
+            'label' => __('HS Code', 'woocommerce-us-duties'),
+            'value' => get_post_meta($variation->ID, '_hs_code', true),
+            'wrapper_class' => 'form-row form-row-first',
+            'placeholder' => __('Inherit from parent...', 'woocommerce-us-duties'),
         ]);
+
         woocommerce_wp_text_input([
             'id' => "_country_of_origin[{$loop}]",
             'label' => __('Country of Origin (ISO-2)', 'woocommerce-us-duties'),
             'value' => get_post_meta($variation->ID, '_country_of_origin', true),
             'maxlength' => 2,
+            'wrapper_class' => 'form-row form-row-last',
+            'placeholder' => __('Inherit from parent...', 'woocommerce-us-duties'),
         ]);
+
+        echo '</div>';
     }
 
     public function save_variation_fields($variation_id, $i): void {
-        if (isset($_POST['_customs_description'][$i])) {
-            update_post_meta($variation_id, '_customs_description', wp_kses_post(wp_unslash($_POST['_customs_description'][$i])));
+        if (isset($_POST['_hs_code'][$i])) {
+            update_post_meta($variation_id, '_hs_code', trim(sanitize_text_field(wp_unslash($_POST['_hs_code'][$i]))));
         }
         if (isset($_POST['_country_of_origin'][$i])) {
             update_post_meta($variation_id, '_country_of_origin', strtoupper(sanitize_text_field(wp_unslash($_POST['_country_of_origin'][$i]))));
@@ -339,11 +380,20 @@ class WRD_Admin {
         echo '</form>';
 
         echo '<h2>' . esc_html__('Cleanup Duplicate Profiles', 'woocommerce-us-duties') . '</h2>';
-        echo '<p>' . esc_html__('Merge duplicate profiles that have the same HS code and country code. Product assignments will be preserved and moved to the canonical profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<p>' . esc_html__('Merge duplicate profiles that have the same HS code and country code. Only processes profiles with HS codes. Product assignments will be preserved and moved to the canonical profile.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" style="margin-top:8px;">';
         wp_nonce_field('wrd_cleanup_duplicates', 'wrd_cleanup_nonce');
         echo '<p><label><input type="checkbox" name="cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
         submit_button(__('Find & Merge Duplicates', 'woocommerce-us-duties'), 'secondary');
+        echo '</form>';
+
+        echo '<h2>' . esc_html__('Migrate Products to HS Codes', 'woocommerce-us-duties') . '</h2>';
+        echo '<p>' . esc_html__('For products missing HS codes, look up matching profiles by description + country and populate the HS code from the profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post" style="margin-top:8px;">';
+        wp_nonce_field('wrd_migrate_hs', 'wrd_migrate_hs_nonce');
+        echo '<p><label><input type="checkbox" name="migrate_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
+        echo '<p><label>' . esc_html__('Limit', 'woocommerce-us-duties') . ' <input type="number" name="migrate_limit" value="100" min="1" max="10000" style="width:80px" /> ' . esc_html__('products', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Migrate HS Codes', 'woocommerce-us-duties'), 'secondary');
         echo '</form>';
 
         // Handle Profiles CSV import
@@ -401,6 +451,25 @@ class WRD_Admin {
             }
         }
 
+        // Handle HS code migration
+        if (!empty($_POST['wrd_migrate_hs_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_migrate_hs_nonce'])), 'wrd_migrate_hs')) {
+            $migrate_summary = $this->handle_hs_migration();
+            if (is_array($migrate_summary)) {
+                echo '<div class="notice notice-success"><p>' . esc_html(sprintf(
+                    __('Migration: %1$d products checked, %2$d missing HS codes, %3$d matched to profiles, %4$d updated. (dry-run: %5$s)', 'woocommerce-us-duties'),
+                    (int)($migrate_summary['checked'] ?? 0),
+                    (int)($migrate_summary['missing_hs'] ?? 0),
+                    (int)($migrate_summary['matched'] ?? 0),
+                    (int)($migrate_summary['updated'] ?? 0),
+                    !empty($migrate_summary['dry_run']) ? 'yes' : 'no'
+                )) . '</p>';
+                if (!empty($migrate_summary['messages'])) {
+                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:300px;overflow:auto;">' . esc_html(implode("\n", array_slice((array)$migrate_summary['messages'], 0, 100))) . '</pre></details>';
+                }
+                echo '</div>';
+            }
+        }
+
         // Products CSV importer
         if (!empty($_POST['wrd_products_import_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_products_import_nonce'])), 'wrd_products_import')) {
             $summary = $this->handle_products_csv_import();
@@ -414,20 +483,21 @@ class WRD_Admin {
         }
 
         echo '<h2>' . esc_html__('Assign Customs to Products (CSV)', 'woocommerce-us-duties') . '</h2>';
-        echo '<p>' . esc_html__('Upload a CSV with columns for product ID or SKU, customs description, and country code. Map field names as needed. Supports dry run.', 'woocommerce-us-duties') . '</p>';
+        echo '<p>' . esc_html__('Upload a CSV with columns for product ID/SKU, HS code, country code, and optionally description. HS code + country is preferred.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" enctype="multipart/form-data" style="margin-top:8px;">';
         wp_nonce_field('wrd_products_import', 'wrd_products_import_nonce');
         echo '<p><input type="file" name="wrd_products_csv" accept=".csv" required /></p>';
         echo '<p><label><input type="checkbox" name="dry_run" value="1" checked /> ' . esc_html__('Dry run only (no changes)', 'woocommerce-us-duties') . '</label></p>';
         echo '<p><strong>' . esc_html__('Header Mapping (optional)', 'woocommerce-us-duties') . '</strong><br/>';
-        echo esc_html__('Leave blank to autodetect common names like product_id, sku, customs_description, country_code.', 'woocommerce-us-duties') . '</p>';
+        echo esc_html__('Leave blank to autodetect common names like product_id, sku, hs_code, country_code, customs_description.', 'woocommerce-us-duties') . '</p>';
         echo '<p>';
         echo '<label>' . esc_html__('Product Identifier Header', 'woocommerce-us-duties') . ' <input type="text" name="map_identifier" placeholder="product_id or sku" /></label> ';
         echo '<label>' . esc_html__('Identifier Type', 'woocommerce-us-duties') . ' <select name="identifier_type"><option value="auto">' . esc_html__('Auto', 'woocommerce-us-duties') . '</option><option value="id">' . esc_html__('Product ID', 'woocommerce-us-duties') . '</option><option value="sku">' . esc_html__('SKU', 'woocommerce-us-duties') . '</option></select></label>';
         echo '</p>';
         echo '<p>';
-        echo '<label>' . esc_html__('Customs Description Header', 'woocommerce-us-duties') . ' <input type="text" name="map_desc" placeholder="customs_description" /></label> ';
-        echo '<label>' . esc_html__('Country Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_cc" placeholder="country_code" /></label>';
+        echo '<label>' . esc_html__('HS Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_hs" placeholder="hs_code" /></label> ';
+        echo '<label>' . esc_html__('Country Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_cc" placeholder="country_code" /></label> ';
+        echo '<label>' . esc_html__('Description Header', 'woocommerce-us-duties') . ' <input type="text" name="map_desc" placeholder="customs_description" /></label>';
         echo '</p>';
         submit_button(__('Import Products CSV', 'woocommerce-us-duties'));
         echo '</form>';
@@ -579,15 +649,19 @@ class WRD_Admin {
         echo '<h4>' . esc_html__('Customs', 'wrd-us-duty') . '</h4>';
         echo '<label class="inline-edit-group">';
         echo '<span class="title">' . esc_html__('Profile (type to search)', 'wrd-us-duty') . '</span>';
-        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="e.g., Vulcanized rubber suction pad (TW)" /></span>';
+        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search by HS code, country, or description...', 'wrd-us-duty') . '" /></span>';
         echo '</label>';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('Description', 'wrd-us-duty') . '</span>';
-        echo '<span class="input-text-wrap"><input type="text" name="wrd_customs_description" value="" /></span>';
+        echo '<span class="title">' . esc_html__('HS Code', 'wrd-us-duty') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" name="wrd_hs_code" value="" /></span>';
         echo '</label>';
         echo '<label class="inline-edit-group">';
         echo '<span class="title">' . esc_html__('Origin (ISO-2)', 'wrd-us-duty') . '</span>';
         echo '<span class="input-text-wrap"><input type="text" name="wrd_country_of_origin" value="" maxlength="2" /></span>';
+        echo '</label>';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Description', 'wrd-us-duty') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" name="wrd_customs_description" value="" /></span>';
         echo '</label>';
         echo '<p class="description">' . esc_html__('Leave blank to keep existing values. Applies to selected items for Bulk Edit.', 'wrd-us-duty') . '</p>';
         echo '</div></fieldset>';
@@ -597,19 +671,22 @@ class WRD_Admin {
         // Secondary render inside WC panels for robustness (bulk editor UI)
         echo '<div class="wrd-customs-inline" style="margin-top:8px;">';
         echo '<strong>' . esc_html__('Customs', 'wrd-us-duty') . ':</strong> ';
-        echo '<input type="text" class="wrd-profile-lookup" style="min-width:260px" placeholder="Search profile..." /> ';
-        echo '<input type="text" name="wrd_customs_description" placeholder="Description" /> ';
-        echo '<input type="text" name="wrd_country_of_origin" placeholder="CC" maxlength="2" style="width:60px" /> ';
+        echo '<input type="text" class="wrd-profile-lookup" style="min-width:260px" placeholder="' . esc_attr__('Search profile...', 'wrd-us-duty') . '" /> ';
+        echo '<input type="text" name="wrd_hs_code" placeholder="' . esc_attr__('HS Code', 'wrd-us-duty') . '" style="width:120px" /> ';
+        echo '<input type="text" name="wrd_country_of_origin" placeholder="' . esc_attr__('CC', 'wrd-us-duty') . '" maxlength="2" style="width:60px" /> ';
+        echo '<input type="text" name="wrd_customs_description" placeholder="' . esc_attr__('Description', 'wrd-us-duty') . '" /> ';
         echo '</div>';
     }
 
     public function handle_quick_bulk_save($product) {
         if (!$product instanceof WC_Product) { return; }
         // Use same fields for both quick and bulk edit
+        $hs_code = isset($_REQUEST['wrd_hs_code']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['wrd_hs_code']))) : '';
         $desc = isset($_REQUEST['wrd_customs_description']) ? wp_kses_post(wp_unslash($_REQUEST['wrd_customs_description'])) : '';
         $origin = isset($_REQUEST['wrd_country_of_origin']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['wrd_country_of_origin']))) : '';
 
         $changed = false;
+        if ($hs_code !== '') { $product->update_meta_data('_hs_code', $hs_code); $changed = true; }
         if ($desc !== '') { $product->update_meta_data('_customs_description', $desc); $changed = true; }
         if ($origin !== '') { $product->update_meta_data('_country_of_origin', $origin); $changed = true; }
         if ($changed) {
@@ -673,23 +750,33 @@ class WRD_Admin {
         $sql = $wpdb->prepare(
             "SELECT description_raw, country_code, hs_code
              FROM {$table}
-             WHERE description_raw LIKE %s OR description_normalized LIKE %s OR country_code LIKE %s
-             GROUP BY description_raw, country_code, hs_code
-             ORDER BY description_raw ASC
+             WHERE description_raw LIKE %s OR description_normalized LIKE %s OR country_code LIKE %s OR hs_code LIKE %s
+             GROUP BY hs_code, country_code
+             ORDER BY hs_code ASC, country_code ASC
              LIMIT 20",
-            $like, $like, $like
+            $like, $like, $like, $like
         );
         $rows = $wpdb->get_results($sql, ARRAY_A);
         $out = [];
         foreach ($rows as $r) {
-            $text = $r['description_raw'] . ' (' . strtoupper($r['country_code']) . ')';
-            if (!empty($r['hs_code'])) { $text .= ' — HS ' . $r['hs_code']; }
+            $hs = !empty($r['hs_code']) ? $r['hs_code'] : '';
+            $cc = strtoupper($r['country_code']);
+            $desc = $r['description_raw'];
+
+            // Format label: "HSCODE (CC): Description" or "Description (CC)" if no HS code
+            if ($hs) {
+                $text = $hs . ' (' . $cc . '): ' . $desc;
+            } else {
+                $text = $desc . ' (' . $cc . ')';
+            }
+
             $out[] = [
-                'id' => $r['description_raw'] . '|' . strtoupper($r['country_code']),
+                'id' => $hs . '|' . $cc,
                 'label' => $text,
                 'value' => $text,
-                'desc' => $r['description_raw'],
-                'cc' => strtoupper($r['country_code']),
+                'hs' => $hs,
+                'cc' => $cc,
+                'desc' => $desc,
             ];
         }
         wp_send_json($out);
@@ -1028,6 +1115,117 @@ class WRD_Admin {
         return $normalized;
     }
 
+    private function handle_hs_migration(): array {
+        $dry_run = !empty($_POST['migrate_dry_run']);
+        $limit = isset($_POST['migrate_limit']) ? max(1, min(10000, (int)$_POST['migrate_limit'])) : 100;
+
+        $summary = [
+            'checked' => 0,
+            'missing_hs' => 0,
+            'matched' => 0,
+            'updated' => 0,
+            'dry_run' => $dry_run,
+            'messages' => [],
+        ];
+
+        // Query products that have description + country but no HS code
+        $args = [
+            'post_type' => ['product', 'product_variation'],
+            'post_status' => ['publish', 'draft', 'pending', 'private'],
+            'posts_per_page' => $limit,
+            'fields' => 'ids',
+            'meta_query' => [
+                'relation' => 'AND',
+                [
+                    'relation' => 'OR',
+                    [
+                        'key' => '_hs_code',
+                        'compare' => 'NOT EXISTS',
+                    ],
+                    [
+                        'key' => '_hs_code',
+                        'value' => '',
+                        'compare' => '=',
+                    ],
+                ],
+                [
+                    'key' => '_customs_description',
+                    'compare' => 'EXISTS',
+                ],
+                [
+                    'key' => '_country_of_origin',
+                    'compare' => 'EXISTS',
+                ],
+            ],
+        ];
+
+        $query = new WP_Query($args);
+        $product_ids = $query->posts;
+
+        if (empty($product_ids)) {
+            $summary['messages'][] = 'No products found missing HS codes.';
+            return $summary;
+        }
+
+        $summary['checked'] = count($product_ids);
+        $summary['messages'][] = sprintf('Found %d products missing HS codes.', $summary['checked']);
+
+        foreach ($product_ids as $product_id) {
+            $desc = get_post_meta($product_id, '_customs_description', true);
+            $origin = get_post_meta($product_id, '_country_of_origin', true);
+
+            if (!$desc || !$origin) {
+                continue;
+            }
+
+            $summary['missing_hs']++;
+
+            // Look up profile by description + country
+            $profile = WRD_DB::get_profile($desc, $origin);
+
+            if (!$profile || empty($profile['hs_code'])) {
+                $summary['messages'][] = sprintf(
+                    'Product #%d: No profile found with HS code for "%s" (%s)',
+                    $product_id,
+                    mb_substr($desc, 0, 40),
+                    $origin
+                );
+                continue;
+            }
+
+            $summary['matched']++;
+            $hs_code = $profile['hs_code'];
+
+            if (!$dry_run) {
+                update_post_meta($product_id, '_hs_code', $hs_code);
+                // Also update normalized meta
+                $post_type = get_post_type($product_id);
+                if ($post_type === 'product_variation') {
+                    $this->update_normalized_meta_for_variation($product_id);
+                } else {
+                    $this->update_normalized_meta_for_product($product_id);
+                }
+                $summary['updated']++;
+            } else {
+                $summary['updated']++;
+            }
+
+            $summary['messages'][] = sprintf(
+                'Product #%d: Matched to profile #%d - HS Code: %s',
+                $product_id,
+                $profile['id'],
+                $hs_code
+            );
+        }
+
+        if ($dry_run) {
+            $summary['messages'][] = '';
+            $summary['messages'][] = 'DRY RUN - No changes made. Uncheck "Dry run" to apply changes.';
+        }
+
+        return $summary;
+    }
+
     private function handle_duplicate_cleanup(): array {
         $dry_run = !empty($_POST['cleanup_dry_run']);
         global $wpdb;
@@ -1042,10 +1240,10 @@ class WRD_Admin {
             'messages' => [],
         ];
 
-        // Find all profiles grouped by HS code + country code
+        // Find all profiles grouped by HS code + country code (only where HS code exists)
         $sql = "SELECT hs_code, country_code, COUNT(*) as cnt, GROUP_CONCAT(id ORDER BY id ASC) as ids
                 FROM {$table}
-                WHERE hs_code != ''
+                WHERE hs_code IS NOT NULL AND hs_code != ''
                 GROUP BY hs_code, country_code
                 HAVING cnt > 1
                 ORDER BY cnt DESC, hs_code ASC";
@@ -1436,6 +1634,7 @@ class WRD_Admin {
         $header_lc = array_map(function($h){ return strtolower(trim((string)$h)); }, $header);
 
         $map_identifier = strtolower(trim((string)($_POST['map_identifier'] ?? '')));
+        $map_hs = strtolower(trim((string)($_POST['map_hs'] ?? '')));
         $map_desc = strtolower(trim((string)($_POST['map_desc'] ?? '')));
         $map_cc = strtolower(trim((string)($_POST['map_cc'] ?? '')));
         $identifier_type = strtolower(trim((string)($_POST['identifier_type'] ?? 'auto')));
@@ -1451,14 +1650,16 @@ class WRD_Admin {
         };
 
         $idx_ident = $map_identifier !== '' ? array_search($map_identifier, $header_lc, true) : $auto_idx(['product_id','id','sku','product_sku']);
+        $idx_hs = $map_hs !== '' ? array_search($map_hs, $header_lc, true) : $auto_idx(['hs_code','hs','hscode','tariff_code']);
         $idx_desc = $map_desc !== '' ? array_search($map_desc, $header_lc, true) : $auto_idx(['customs_description','description','customs_desc']);
         $idx_cc = $map_cc !== '' ? array_search($map_cc, $header_lc, true) : $auto_idx(['country_code','origin','country','cc']);
 
         $messages = [];
         if ($idx_ident === -1) { $messages[] = 'Identifier header not found.'; }
-        if ($idx_desc === -1) { $messages[] = 'Customs description header not found.'; }
+        // HS code OR description must be present (not both required)
+        if ($idx_hs === -1 && $idx_desc === -1) { $messages[] = 'Neither HS code nor customs description header found.'; }
         if ($idx_cc === -1) { $messages[] = 'Country code header not found.'; }
-        if ($idx_ident === -1 || $idx_desc === -1 || $idx_cc === -1) {
+        if ($idx_ident === -1 || ($idx_hs === -1 && $idx_desc === -1) || $idx_cc === -1) {
             fclose($fh);
             return ['rows'=>0,'matched'=>0,'updated'=>0,'skipped'=>0,'errors'=>1,'messages'=>$messages];
         }
@@ -1467,9 +1668,14 @@ class WRD_Admin {
         while (($row = fgetcsv($fh)) !== false) {
             $rows++;
             $ident = isset($row[$idx_ident]) ? trim((string)$row[$idx_ident]) : '';
-            $desc = isset($row[$idx_desc]) ? trim((string)$row[$idx_desc]) : '';
+            $hs_code = ($idx_hs !== -1 && isset($row[$idx_hs])) ? trim((string)$row[$idx_hs]) : '';
+            $desc = ($idx_desc !== -1 && isset($row[$idx_desc])) ? trim((string)$row[$idx_desc]) : '';
             $cc = strtoupper(isset($row[$idx_cc]) ? trim((string)$row[$idx_cc]) : '');
-            if ($ident === '' || $desc === '' || $cc === '') { $skipped++; $messages[] = "Row {$rows}: missing field(s)"; continue; }
+            if ($ident === '' || ($hs_code === '' && $desc === '') || $cc === '') {
+                $skipped++;
+                $messages[] = "Row {$rows}: missing field(s)";
+                continue;
+            }
 
             // Resolve product id
             $pid = 0;
@@ -1493,9 +1699,17 @@ class WRD_Admin {
 
             $product = wc_get_product($pid);
             if (!$product) { $skipped++; $messages[] = "Row {$rows}: product {$pid} could not be loaded"; continue; }
-            $product->update_meta_data('_customs_description', wp_kses_post($desc));
+
+            // Update product meta
+            if ($hs_code !== '') {
+                $product->update_meta_data('_hs_code', $hs_code);
+            }
+            if ($desc !== '') {
+                $product->update_meta_data('_customs_description', wp_kses_post($desc));
+            }
             $product->update_meta_data('_country_of_origin', $cc);
             $product->save();
+
             // Update normalized meta correctly for product vs variation
             if ($product->is_type('variation')) {
                 $this->update_normalized_meta_for_variation((int) $product->get_id());
@@ -1521,11 +1735,26 @@ class WRD_Admin {
     }
 
     private function update_normalized_meta_for_product(int $product_id): void {
-        $desc = get_post_meta($product_id, '_customs_description', true);
+        // Get HS code and origin
+        $hs_code = trim((string)get_post_meta($product_id, '_hs_code', true));
         $origin = strtoupper((string)get_post_meta($product_id, '_country_of_origin', true));
+
+        // Legacy: also handle _customs_description for backward compatibility
+        $desc = get_post_meta($product_id, '_customs_description', true);
         $descNorm = $desc ? WRD_DB::normalize_description($desc) : '';
-        update_post_meta($product_id, '_wrd_desc_norm', $descNorm);
+
+        // Store normalized values for quick lookup
+        update_post_meta($product_id, '_wrd_hs_code', $hs_code);
         update_post_meta($product_id, '_wrd_origin_cc', $origin);
+        update_post_meta($product_id, '_wrd_desc_norm', $descNorm); // Keep for legacy support
+
+        // If product has HS + country but no description, pull from profile
+        if ($hs_code && $origin && !$desc) {
+            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            if ($profile && isset($profile['description_raw'])) {
+                update_post_meta($product_id, '_customs_description', $profile['description_raw']);
+            }
+        }
 
         // Update variations that inherit
         $children = get_children([
@@ -1535,9 +1764,10 @@ class WRD_Admin {
             'fields' => 'ids',
         ]);
         foreach ($children as $vid) {
-            $vdesc = get_post_meta($vid, '_customs_description', true);
+            $vhs = get_post_meta($vid, '_hs_code', true);
             $vorigin = strtoupper((string)get_post_meta($vid, '_country_of_origin', true));
-            if ($vdesc === '' || $vorigin === '') {
+            $vdesc = get_post_meta($vid, '_customs_description', true);
+            if ($vhs === '' || $vorigin === '' || $vdesc === '') {
                 $this->update_normalized_meta_for_variation((int)$vid);
             }
         }
@@ -1545,13 +1775,38 @@ class WRD_Admin {
 
     private function update_normalized_meta_for_variation(int $variation_id): void {
         $parent_id = (int) get_post_field('post_parent', $variation_id);
-        $desc = get_post_meta($variation_id, '_customs_description', true);
+
+        // Get values from variation, inherit from parent if not set
+        $hs_code = trim((string)get_post_meta($variation_id, '_hs_code', true));
         $origin = strtoupper((string)get_post_meta($variation_id, '_country_of_origin', true));
-        if ($desc === '' && $parent_id) { $desc = get_post_meta($parent_id, '_customs_description', true); }
-        if ($origin === '' && $parent_id) { $origin = strtoupper((string)get_post_meta($parent_id, '_country_of_origin', true)); }
+        $desc = get_post_meta($variation_id, '_customs_description', true);
+
+        if ($parent_id) {
+            if ($hs_code === '') {
+                $hs_code = trim((string)get_post_meta($parent_id, '_hs_code', true));
+            }
+            if ($origin === '') {
+                $origin = strtoupper((string)get_post_meta($parent_id, '_country_of_origin', true));
+            }
+            if ($desc === '') {
+                $desc = get_post_meta($parent_id, '_customs_description', true);
+            }
+        }
+
         $descNorm = $desc ? WRD_DB::normalize_description($desc) : '';
-        update_post_meta($variation_id, '_wrd_desc_norm', $descNorm);
+
+        // Store normalized values
+        update_post_meta($variation_id, '_wrd_hs_code', $hs_code);
         update_post_meta($variation_id, '_wrd_origin_cc', $origin);
+        update_post_meta($variation_id, '_wrd_desc_norm', $descNorm); // Keep for legacy support
+
+        // If variation has HS + country but no description, pull from profile
+        if ($hs_code && $origin && !$desc) {
+            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            if ($profile && isset($profile['description_raw'])) {
+                update_post_meta($variation_id, '_customs_description', $profile['description_raw']);
+            }
+        }
     }
 
     private function reindex_products(int $max): int {
