@@ -13,18 +13,27 @@ class WRD_Duty_Engine {
 
     public static function compute_rate_percent(array $us_duty_json, string $channel): float {
         $channel = strtolower($channel);
-        if (empty($us_duty_json[$channel]['rates']) || !is_array($us_duty_json[$channel]['rates'])) {
+        if (empty($us_duty_json[$channel]['rates'])) {
             return 0.0;
         }
-        $sum = 0.0;
-        foreach ($us_duty_json[$channel]['rates'] as $k => $v) {
-            $sum += (float)$v;
+        // Rates might be stored as an object or array; normalize to array of numeric values
+        $ratesRaw = $us_duty_json[$channel]['rates'];
+        if (is_object($ratesRaw)) { $ratesRaw = (array) $ratesRaw; }
+        if (!is_array($ratesRaw)) { return 0.0; }
+
+        $values = [];
+        foreach ($ratesRaw as $k => $v) {
+            if (is_numeric($v)) { $values[] = (float)$v; }
         }
-        // If rates are given as fractions (0.053) convert to %; if given as 5.3 treat as % directly
-        if ($sum <= 1.0) {
-            return $sum * 100.0;
-        }
-        return $sum * 100.0; // our JSON appears fractional; keep as percentage points
+        if (!$values) { return 0.0; }
+
+        $sum = array_sum($values);
+        $max = max($values);
+
+        // Auto-detect: if any component >= 1, treat inputs as percentages (e.g., 5.3 means 5.3%).
+        // Otherwise treat inputs as fractional (e.g., 0.053 means 5.3%).
+        $isPercent = ($max >= 1.0);
+        return $isPercent ? $sum : ($sum * 100.0);
     }
 
     public static function decide_channel(string $countryCode): string {
@@ -132,8 +141,15 @@ class WRD_Duty_Engine {
             // Normalize
             $desc = is_string($desc) ? trim($desc) : '';
             $origin = is_string($origin) ? strtoupper(trim($origin)) : '';
-
-            $profile = ($desc && $origin) ? WRD_DB::get_profile($desc, $origin) : null;
+            // Prefer direct profile link if available
+            $profile = null;
+            $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
+            if ($profile_id > 0) {
+                $profile = WRD_DB::get_profile_by_id($profile_id);
+            }
+            if (!$profile && $desc && $origin) {
+                $profile = WRD_DB::get_profile($desc, $origin);
+            }
             if (!$profile) { $missingProfiles++; }
             $channel = $overrideData ? $overrideData['channel'] : ($origin ? self::decide_channel($origin) : 'commercial');
 
@@ -220,8 +236,8 @@ class WRD_Duty_Engine {
         if (!$product instanceof \WC_Product) { return null; }
         $settings = get_option(WRD_Settings::OPTION, []);
         $currency = self::current_currency();
-        $desc = $product->get_meta('_customs_description', true);
-        $origin = $product->get_meta('_country_of_origin', true);
+    $desc = $product->get_meta('_customs_description', true);
+    $origin = $product->get_meta('_country_of_origin', true);
         if ($origin === '' && $product->is_type('variation')) {
             $parent = wc_get_product($product->get_parent_id());
             if ($parent) {
@@ -251,7 +267,11 @@ class WRD_Duty_Engine {
         }
 
         // Profile and rate
-        $profile = WRD_DB::get_profile($desc, $origin);
+    // Prefer direct profile link if available
+    $profile = null;
+    $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
+    if ($profile_id > 0) { $profile = WRD_DB::get_profile_by_id($profile_id); }
+    if (!$profile) { $profile = WRD_DB::get_profile($desc, $origin); }
         $ratePct = $profile ? self::compute_rate_percent($profile['us_duty_json'], $channel) : 0.0;
 
         // CUSMA

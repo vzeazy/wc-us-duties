@@ -38,6 +38,8 @@ class WRD_Admin {
         // Admin assets and AJAX for profile search
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_wrd_search_profiles', [$this, 'ajax_search_profiles']);
+    add_action('wp_ajax_wrd_reconcile_assign', [$this, 'ajax_reconcile_assign']);
+    add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
 
         // Redirect legacy admin page slugs
         add_action('admin_init', [$this, 'redirect_legacy_pages']);
@@ -172,6 +174,7 @@ class WRD_Admin {
         $active = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'profiles';
         $tabs = [
             'profiles' => __('Profiles', 'woocommerce-us-duties'),
+            'reconcile' => __('Reconciliation', 'woocommerce-us-duties'),
             'import' => __('Import/Export', 'woocommerce-us-duties'),
             'settings' => __('Settings', 'woocommerce-us-duties'),
             'tools' => __('Tools', 'woocommerce-us-duties'),
@@ -185,6 +188,8 @@ class WRD_Admin {
 
         if ($active === 'profiles') {
             $this->render_tab_profiles();
+        } elseif ($active === 'reconcile') {
+            $this->render_tab_reconciliation();
         } elseif ($active === 'import') {
             $this->render_tab_import_export();
         } elseif ($active === 'settings') {
@@ -203,6 +208,11 @@ class WRD_Admin {
             return;
         }
         if (isset($_GET['action']) && in_array($_GET['action'], ['new','edit'], true)) {
+            // Handle save
+            if (!empty($_POST['wrd_profile_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_profile_nonce'])), 'wrd_save_profile')) {
+                $this->save_profile_from_post();
+                echo '<div class="updated"><p>' . esc_html__('Profile saved.', 'wrd-us-duty') . '</p></div>';
+            }
             $this->render_profile_form();
             return;
         }
@@ -289,7 +299,24 @@ class WRD_Admin {
         echo '<h2>' . esc_html__('Import CSV (Profiles)', 'woocommerce-us-duties') . '</h2>';
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('wrd_import_csv', 'wrd_import_nonce');
-        echo '<input type="file" name="wrd_csv" accept=".csv" required /> ';
+        echo '<p><input type="file" name="wrd_csv" accept=".csv" required /></p>';
+        echo '<p><strong>' . esc_html__('Header Mapping (optional)', 'woocommerce-us-duties') . '</strong><br/>';
+        echo esc_html__('Leave blank to use standard names: description, country_code, hs_code, fta_flags, us_duty_json, effective_from, effective_to, notes.', 'woocommerce-us-duties') . '</p>';
+        echo '<p>';
+        echo '<label>' . esc_html__('Description', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_description" placeholder="description" /></label> ';
+        echo '<label>' . esc_html__('Country Code', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_country" placeholder="country_code" /></label> ';
+        echo '<label>' . esc_html__('HS Code', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_hs" placeholder="hs_code" /></label>';
+        echo '</p>';
+        echo '<p>';
+        echo '<label>' . esc_html__('FTA Flags (JSON)', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_fta" placeholder="fta_flags" /></label> ';
+        echo '<label>' . esc_html__('US Duty JSON', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_udj" placeholder="us_duty_json" /></label>';
+        echo '</p>';
+        echo '<p>';
+        echo '<label>' . esc_html__('Effective From', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_from" placeholder="effective_from" /></label> ';
+        echo '<label>' . esc_html__('Effective To', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_to" placeholder="effective_to" /></label> ';
+        echo '<label>' . esc_html__('Notes', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_notes" placeholder="notes" /></label>';
+        echo '</p>';
+        echo '<p><label><input type="checkbox" name="profiles_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
         submit_button(__('Import', 'woocommerce-us-duties'));
         echo '</form>';
 
@@ -313,8 +340,19 @@ class WRD_Admin {
 
         // Handle Profiles CSV import
         if (!empty($_POST['wrd_import_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_import_nonce'])), 'wrd_import_csv')) {
-            $this->handle_csv_import();
-            echo '<div class="updated"><p>' . esc_html__('Profiles CSV import completed.', 'woocommerce-us-duties') . '</p></div>';
+            $summary = $this->handle_csv_import();
+            if (is_array($summary)) {
+                echo '<div class="notice notice-info"><p>' . esc_html(sprintf(
+                    __('Profiles CSV: %1$d rows, %2$d inserted, %3$d updated, %4$d skipped, %5$d errors. (dry-run: %6$s)', 'woocommerce-us-duties'),
+                    (int)($summary['rows'] ?? 0), (int)($summary['inserted'] ?? 0), (int)($summary['updated'] ?? 0), (int)($summary['skipped'] ?? 0), (int)($summary['errors'] ?? 0), !empty($summary['dry_run']) ? 'yes' : 'no'
+                )) . '</p>';
+                if (!empty($summary['messages'])) {
+                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:220px;overflow:auto;">' . esc_html(implode("\n", array_slice($summary['messages'], 0, 50))) . '</pre></details>';
+                }
+                echo '</div>';
+            } else {
+                echo '<div class="updated"><p>' . esc_html__('Profiles CSV import completed.', 'woocommerce-us-duties') . '</p></div>';
+            }
         }
 
         // Handle duties JSON import
@@ -417,6 +455,7 @@ class WRD_Admin {
         // Try product-level first
         $desc = get_post_meta($post_id, '_customs_description', true);
         $origin = strtoupper(trim((string) get_post_meta($post_id, '_country_of_origin', true)));
+        $linked_profile_id = (int) get_post_meta($post_id, '_wrd_profile_id', true);
 
         // Helper to echo statuses consistently
         $echo_missing = function() {
@@ -448,7 +487,9 @@ class WRD_Admin {
         };
 
         $product_match = null; // null = no data, true/false = matched/not
-        if ($desc && $origin) {
+        if ($linked_profile_id > 0) {
+            $product_match = true;
+        } elseif ($desc && $origin) {
             $product_match = (bool) $get_profile($desc, $origin);
         }
 
@@ -492,7 +533,7 @@ class WRD_Admin {
         }
         // Prefer product-level if it exists
         if ($product_match === true) {
-            $prof = $get_profile($desc, $origin);
+            $prof = $linked_profile_id > 0 ? WRD_DB::get_profile_by_id($linked_profile_id) : $get_profile($desc, $origin);
             $channel = WRD_Duty_Engine::decide_channel($origin);
             $ratePct = is_array($prof) ? WRD_Duty_Engine::compute_rate_percent((array)$prof['us_duty_json'], $channel) : 0.0;
             $echo_rate($ratePct, $channel);
@@ -572,6 +613,26 @@ class WRD_Admin {
         // Customs hub pages
         if ($hook === 'woocommerce_page_wrd-customs') {
             wp_enqueue_script('jquery');
+            // Reconciliation page assets
+            if (isset($_GET['tab']) && $_GET['tab'] === 'reconcile') {
+                wp_enqueue_script('jquery-ui-autocomplete');
+                wp_enqueue_script(
+                    'wrd-admin-reconcile',
+                    WRD_US_DUTY_URL . 'assets/admin-reconcile.js',
+                    ['jquery','jquery-ui-autocomplete'],
+                    WRD_US_DUTY_VERSION,
+                    true
+                );
+                wp_localize_script('wrd-admin-reconcile', 'WRDReconcile', [
+                    'ajax' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('wrd_reconcile_nonce'),
+                    'searchNonce' => wp_create_nonce('wrd_search_profiles'),
+                    'i18n' => [
+                        'applied' => __('Applied', 'woocommerce-us-duties'),
+                        'error' => __('Error', 'woocommerce-us-duties'),
+                    ],
+                ]);
+            }
             return;
         }
     }
@@ -607,6 +668,76 @@ class WRD_Admin {
         wp_send_json($out);
     }
 
+    // Assign selected description+country to a product via AJAX (from Reconciliation UI)
+    public function ajax_reconcile_assign() {
+        if (!current_user_can('manage_woocommerce')) { wp_send_json_error(['message' => 'forbidden'], 403); }
+        check_ajax_referer('wrd_reconcile_nonce', 'nonce');
+        $pid = isset($_POST['product_id']) ? (int) $_POST['product_id'] : 0;
+        $desc = isset($_POST['desc']) ? wp_kses_post(wp_unslash($_POST['desc'])) : '';
+        $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+        if ($pid <= 0 || $desc === '' || $cc === '') { wp_send_json_error(['message' => 'invalid_params'], 400); }
+        $product = wc_get_product($pid);
+        if (!$product) { wp_send_json_error(['message' => 'not_found'], 404); }
+        $product->update_meta_data('_customs_description', $desc);
+        $product->update_meta_data('_country_of_origin', $cc);
+        // Optionally store a direct profile link if available
+        $pid_link = WRD_DB::find_active_profile_id($desc, $cc);
+        if ($pid_link > 0) {
+            $product->update_meta_data('_wrd_profile_id', (int)$pid_link);
+        }
+        $product->save();
+        if ($product->is_type('variation')) {
+            $this->update_normalized_meta_for_variation($pid);
+        } else {
+            $this->update_normalized_meta_for_product($pid);
+        }
+        // Return a small payload with status and maybe matched profile data
+        $profile = WRD_DB::get_profile($desc, $cc);
+        $ratePostal = 0.0; $rateComm = 0.0;
+        if ($profile && is_array($profile)) {
+            $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
+            if (is_array($udj)) {
+                $ratePostal = WRD_Duty_Engine::compute_rate_percent($udj, 'postal');
+                $rateComm = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
+            }
+        }
+        wp_send_json_success(['postal_rate' => $ratePostal, 'commercial_rate' => $rateComm]);
+    }
+
+    // Suggest top N profiles for a product by desc similarity and same origin
+    public function ajax_reconcile_suggest() {
+        if (!current_user_can('manage_woocommerce')) { wp_send_json_error(['message' => 'forbidden'], 403); }
+        check_ajax_referer('wrd_reconcile_nonce', 'nonce');
+        $desc = isset($_GET['desc']) ? (string) wp_unslash($_GET['desc']) : '';
+        $cc = isset($_GET['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_GET['cc']))) : '';
+        if ($desc === '' || $cc === '') { wp_send_json_success([]); }
+        global $wpdb; $table = WRD_DB::table_profiles();
+        $like = '%' . $wpdb->esc_like(WRD_DB::normalize_description($desc)) . '%';
+        $now = current_time('mysql');
+        $sql = $wpdb->prepare(
+            "SELECT id, description_raw, country_code, hs_code
+             FROM {$table}
+             WHERE country_code=%s
+               AND description_normalized LIKE %s
+               AND (effective_from IS NULL OR effective_from <= DATE(%s))
+               AND (effective_to IS NULL OR effective_to >= DATE(%s))
+             ORDER BY last_updated DESC
+             LIMIT 5",
+            $cc, $like, $now, $now
+        );
+        $rows = $wpdb->get_results($sql, ARRAY_A);
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'id' => (int)$r['id'],
+                'label' => $r['description_raw'] . ' (' . strtoupper($r['country_code']) . ')' . ($r['hs_code'] ? ' — HS ' . $r['hs_code'] : ''),
+                'desc' => $r['description_raw'],
+                'cc' => strtoupper($r['country_code']),
+            ];
+        }
+        wp_send_json_success($out);
+    }
+
     public function redirect_legacy_pages(): void {
         // Redirect old slug to new hub route to avoid "Sorry, you are not allowed to access this page."
         if (!is_admin()) { return; }
@@ -629,45 +760,82 @@ class WRD_Admin {
 
     // removed legacy profiles page
 
-    private function handle_csv_import(): void {
-        if (empty($_FILES['wrd_csv']) || !is_uploaded_file($_FILES['wrd_csv']['tmp_name'])) { return; }
+    private function handle_csv_import(): ?array {
+        if (empty($_FILES['wrd_csv']) || !is_uploaded_file($_FILES['wrd_csv']['tmp_name'])) { return null; }
         $fh = fopen($_FILES['wrd_csv']['tmp_name'], 'r');
-        if (!$fh) { return; }
+        if (!$fh) { return null; }
         $header = fgetcsv($fh);
-        if (!$header) { fclose($fh); return; }
-        $map = array_flip($header);
-        global $wpdb;
-        $table = WRD_DB::table_profiles();
+        if (!$header) { fclose($fh); return ['rows'=>0,'inserted'=>0,'updated'=>0,'skipped'=>0,'errors'=>1,'messages'=>['Missing header']]; }
+        $header_lc = array_map(function($h){ return strtolower(trim((string)$h)); }, $header);
+
+        // Optional mapping
+        $map_field = function($post_key, $default) use ($header_lc){
+            $name = strtolower(trim((string)($_POST[$post_key] ?? '')));
+            if ($name === '') { $name = $default; }
+            $idx = array_search($name, $header_lc, true);
+            return $idx === false ? -1 : $idx;
+        };
+
+        $idx_desc = $map_field('map_profile_description', 'description');
+        $idx_cc   = $map_field('map_profile_country', 'country_code');
+        $idx_hs   = $map_field('map_profile_hs', 'hs_code');
+        $idx_fta  = $map_field('map_profile_fta', 'fta_flags');
+        $idx_udj  = $map_field('map_profile_udj', 'us_duty_json');
+        $idx_from = $map_field('map_profile_from', 'effective_from');
+        $idx_to   = $map_field('map_profile_to', 'effective_to');
+        $idx_notes= $map_field('map_profile_notes', 'notes');
+
+        $dry_run = !empty($_POST['profiles_dry_run']);
+        $rows=$inserted=$updated=$skipped=$errors=0; $messages=[];
+        global $wpdb; $table = WRD_DB::table_profiles();
 
         while (($row = fgetcsv($fh)) !== false) {
-            $description = $row[$map['description']] ?? '';
-            $country = strtoupper(trim($row[$map['country_code']] ?? ''));
-            $hs = $row[$map['hs_code']] ?? '';
-            $fta = $row[$map['fta_flags']] ?? '[]';
-            $udj = $row[$map['us_duty_json']] ?? '{}';
-            $from = $row[$map['effective_from']] ?? date('Y-m-d');
-            $to = $row[$map['effective_to']] ?? null;
-            $notes = $row[$map['notes']] ?? null;
+            $rows++;
+            $description = $idx_desc >= 0 ? (string)($row[$idx_desc] ?? '') : '';
+            $country = strtoupper(trim($idx_cc >= 0 ? (string)($row[$idx_cc] ?? '') : ''));
+            if ($description === '' || $country === '') { $skipped++; $messages[] = "Row {$rows}: missing description or country"; continue; }
+            $hs = $idx_hs >= 0 ? (string)($row[$idx_hs] ?? '') : '';
+            $fta = $idx_fta >= 0 ? (string)($row[$idx_fta] ?? '[]') : '[]';
+            $udj = $idx_udj >= 0 ? (string)($row[$idx_udj] ?? '{}') : '{}';
+            $from = $idx_from >= 0 ? (string)($row[$idx_from] ?? date('Y-m-d')) : date('Y-m-d');
+            $to = $idx_to >= 0 ? (string)($row[$idx_to] ?? '') : '';
+            $notes = $idx_notes >= 0 ? (string)($row[$idx_notes] ?? '') : '';
 
             $descNorm = WRD_DB::normalize_description($description);
+            // Validate JSON
+            $fta_dec = json_decode($fta, true); if ($fta_dec === null && json_last_error() !== JSON_ERROR_NONE) { $fta_dec = []; }
+            $udj_dec = json_decode($udj, true); if ($udj_dec === null && json_last_error() !== JSON_ERROR_NONE) { $udj_dec = ['postal'=>['rates'=>new stdClass()],'commercial'=>['rates'=>new stdClass()]]; }
 
-            $wpdb->insert(
-                $table,
-                [
-                    'description_raw' => $description,
-                    'description_normalized' => $descNorm,
-                    'country_code' => $country,
-                    'hs_code' => $hs,
-                    'us_duty_json' => $udj,
-                    'fta_flags' => $fta,
-                    'effective_from' => $from,
-                    'effective_to' => $to ?: null,
-                    'notes' => $notes,
-                ],
-                ['%s','%s','%s','%s','%s','%s','%s','%s','%s']
-            );
+            // Upsert by (desc_norm, country, effective_from)
+            $existing_id = (int)$wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$table} WHERE description_normalized=%s AND country_code=%s AND effective_from=%s LIMIT 1",
+                $descNorm, $country, $from
+            ));
+            if ($dry_run) {
+                if ($existing_id) { $updated++; } else { $inserted++; }
+                continue;
+            }
+            $data = [
+                'description_raw' => $description,
+                'description_normalized' => $descNorm,
+                'country_code' => $country,
+                'hs_code' => $hs,
+                'us_duty_json' => wp_json_encode($udj_dec, JSON_UNESCAPED_SLASHES),
+                'fta_flags' => wp_json_encode($fta_dec),
+                'effective_from' => $from,
+                'effective_to' => $to !== '' ? $to : null,
+                'notes' => $notes,
+            ];
+            if ($existing_id) {
+                $ok = $wpdb->update($table, $data, ['id' => $existing_id]);
+                if ($ok !== false) { $updated++; } else { $errors++; $messages[] = (string)$wpdb->last_error; }
+            } else {
+                $ok = $wpdb->insert($table, $data);
+                if ($ok) { $inserted++; } else { $errors++; $messages[] = (string)$wpdb->last_error; }
+            }
         }
         fclose($fh);
+        return compact('rows','inserted','updated','skipped','errors') + ['dry_run' => $dry_run, 'messages' => $messages];
     }
 
     private function handle_duty_json_import(): ?array {
@@ -682,10 +850,19 @@ class WRD_Admin {
             return $counters;
         }
 
-        $duties = isset($data['duties']) ? $data['duties'] : null;
+        // Detect format: Zonos format has 'entries', legacy format has 'duties'
+        $is_zonos_format = isset($data['entries']) && is_array($data['entries']);
+        $duties = null;
+
+        if ($is_zonos_format) {
+            $duties = $data['entries'];
+        } else {
+            $duties = isset($data['duties']) ? $data['duties'] : null;
+        }
+
         if (!is_array($duties)) {
             $counters['errors'] = 1;
-            $counters['error_messages'][] = 'Invalid duties JSON: missing duties array.';
+            $counters['error_messages'][] = 'Invalid duties JSON: missing duties or entries array.';
             return $counters;
         }
 
@@ -707,49 +884,73 @@ class WRD_Admin {
                 continue;
             }
 
-            $description = trim((string)($entry['description'] ?? ''));
-            $country = strtoupper(trim((string)($entry['originCountry'] ?? '')));
+            // Parse based on format
+            if ($is_zonos_format) {
+                $description = trim((string)($entry['description'] ?? ''));
+                $country = strtoupper(trim((string)($entry['origin'] ?? '')));
+                $hs = (string)($entry['hs_code'] ?? '');
+            } else {
+                $description = trim((string)($entry['description'] ?? ''));
+                $country = strtoupper(trim((string)($entry['originCountry'] ?? '')));
+                $hs = (string)($entry['hsCode'] ?? '');
+            }
+
             if ($description === '' || $country === '') {
                 $counters['skipped']++;
-                $counters['error_messages'][] = sprintf('Entry %s missing description or originCountry.', (string)$index);
+                $counters['error_messages'][] = sprintf('Entry %s missing description or origin country.', (string)$index);
                 continue;
             }
 
-            $hs = (string)($entry['hsCode'] ?? '');
             if (strlen($hs) > 20) { $hs = substr($hs, 0, 20); }
 
             $entrySource = isset($entry['source']) ? $this->normalize_profile_source((string)$entry['source']) : $fileSource;
 
-            $us_duty_rates = [];
+            $postal_rates = [];
+            $commercial_rates = [];
             $fta_flags = [];
-            if (isset($entry['tariffs']) && is_array($entry['tariffs'])) {
-                foreach ($entry['tariffs'] as $tariffIndex => $tariff) {
-                    if (!is_array($tariff)) { continue; }
-                    if (!isset($tariff['rate']) || !is_numeric($tariff['rate'])) { continue; }
 
-                    $rate_value = (float)$tariff['rate'];
-                    $rate_label = isset($tariff['description']) ? (string)$tariff['description'] : '';
-                    $fallback_key = isset($tariff['code']) ? (string)$tariff['code'] : '';
-                    $rate_key_raw = $rate_label !== '' ? $rate_label : $fallback_key;
-                    $rate_key = sanitize_key($rate_key_raw);
-                    if ($rate_key === '') {
-                        $rate_key = 'rate_' . substr(md5($rate_key_raw . $tariffIndex), 0, 8);
-                    }
-                    $us_duty_rates[$rate_key] = $rate_value;
+            if ($is_zonos_format) {
+                // Zonos format has separate postal and commercial rate objects
+                if (isset($entry['postal']['rates']) && is_array($entry['postal']['rates'])) {
+                    $postal_rates = $entry['postal']['rates'];
+                }
+                if (isset($entry['commercial']['rates']) && is_array($entry['commercial']['rates'])) {
+                    $commercial_rates = $entry['commercial']['rates'];
+                }
+            } else {
+                // Legacy format: parse tariffs array and use same rates for postal/commercial
+                $us_duty_rates = [];
+                if (isset($entry['tariffs']) && is_array($entry['tariffs'])) {
+                    foreach ($entry['tariffs'] as $tariffIndex => $tariff) {
+                        if (!is_array($tariff)) { continue; }
+                        if (!isset($tariff['rate']) || !is_numeric($tariff['rate'])) { continue; }
 
-                    $tariff_type = isset($tariff['type']) ? strtoupper((string)$tariff['type']) : '';
-                    $tariff_code = isset($tariff['code']) ? strtoupper((string)$tariff['code']) : '';
-                    if ($tariff_type === 'CUSMA_ELIGIBLE' || $tariff_code === 'CUSMA') {
-                        if (!in_array('CUSMA', $fta_flags, true)) {
-                            $fta_flags[] = 'CUSMA';
+                        $rate_value = (float)$tariff['rate'];
+                        $rate_label = isset($tariff['description']) ? (string)$tariff['description'] : '';
+                        $fallback_key = isset($tariff['code']) ? (string)$tariff['code'] : '';
+                        $rate_key_raw = $rate_label !== '' ? $rate_label : $fallback_key;
+                        $rate_key = sanitize_key($rate_key_raw);
+                        if ($rate_key === '') {
+                            $rate_key = 'rate_' . substr(md5($rate_key_raw . $tariffIndex), 0, 8);
+                        }
+                        $us_duty_rates[$rate_key] = $rate_value;
+
+                        $tariff_type = isset($tariff['type']) ? strtoupper((string)$tariff['type']) : '';
+                        $tariff_code = isset($tariff['code']) ? strtoupper((string)$tariff['code']) : '';
+                        if ($tariff_type === 'CUSMA_ELIGIBLE' || $tariff_code === 'CUSMA') {
+                            if (!in_array('CUSMA', $fta_flags, true)) {
+                                $fta_flags[] = 'CUSMA';
+                            }
                         }
                     }
                 }
+                $postal_rates = $us_duty_rates;
+                $commercial_rates = $us_duty_rates;
             }
 
             $us_duty_json_data = [
-                'postal' => ['rates' => (object)$us_duty_rates],
-                'commercial' => ['rates' => (object)$us_duty_rates],
+                'postal' => ['rates' => (object)$postal_rates],
+                'commercial' => ['rates' => (object)$commercial_rates],
             ];
 
             $descNorm = WRD_DB::normalize_description($description);
@@ -805,8 +1006,17 @@ class WRD_Admin {
         $row = null;
         if ($is_edit) {
             $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+            // Support cloning via ?clone={id}
+            if (!$id && isset($_GET['clone'])) { $id = (int) $_GET['clone']; }
             if ($id) { $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $id), ARRAY_A); }
             if (!$row) { echo '<p>' . esc_html__('Profile not found.', 'wrd-us-duty') . '</p>'; return; }
+            // If cloning, ensure ID is treated as new
+            if (isset($_GET['clone'])) {
+                $row['id'] = 0;
+                $row['effective_from'] = date('Y-m-d');
+                $row['effective_to'] = '';
+                if (empty($row['notes'])) { $row['notes'] = 'Cloned on ' . date('Y-m-d'); }
+            }
         }
         $vals = [
             'id' => $row['id'] ?? 0,
@@ -826,8 +1036,34 @@ class WRD_Admin {
         echo '<tr><th><label>Description</label></th><td><input type="text" name="description_raw" value="' . esc_attr($vals['description_raw']) . '" class="regular-text" required /></td></tr>';
         echo '<tr><th><label>Country Code</label></th><td><input type="text" name="country_code" value="' . esc_attr($vals['country_code']) . '" class="small-text" maxlength="2" required /></td></tr>';
         echo '<tr><th><label>HS Code</label></th><td><input type="text" name="hs_code" value="' . esc_attr($vals['hs_code']) . '" class="regular-text" /></td></tr>';
-        echo '<tr><th><label>FTA Flags (JSON array)</label></th><td><textarea name="fta_flags" rows="2" class="large-text code">' . esc_textarea($vals['fta_flags']) . '</textarea></td></tr>';
-        echo '<tr><th><label>US Duty JSON</label></th><td><textarea name="us_duty_json" rows="8" class="large-text code">' . esc_textarea($vals['us_duty_json']) . '</textarea></td></tr>';
+        // Simple mode inputs
+        $fta_dec_prefill = json_decode($vals['fta_flags'], true);
+        $fta_dec_prefill = is_array($fta_dec_prefill) ? $fta_dec_prefill : [];
+        $udj_prefill = json_decode($vals['us_duty_json'], true);
+        $postal_pref = '';
+        $comm_pref = '';
+        if (is_array($udj_prefill)) {
+            $pr = $udj_prefill['postal']['rates'] ?? [];
+            if (is_object($pr)) { $pr = (array)$pr; }
+            $cr = $udj_prefill['commercial']['rates'] ?? [];
+            if (is_object($cr)) { $cr = (array)$cr; }
+            // Prefer key 'base' else first numeric
+            $postal_pref = isset($pr['base']) && is_numeric($pr['base']) ? (string)$pr['base'] : (string)(reset($pr) !== false ? reset($pr) : '');
+            $comm_pref = isset($cr['base']) && is_numeric($cr['base']) ? (string)$cr['base'] : (string)(reset($cr) !== false ? reset($cr) : '');
+        }
+        echo '<tr><th><label>Postal Duty Rate (%)</label></th><td><input type="number" step="0.0001" min="0" max="100" name="simple_postal_pct" value="' . esc_attr($postal_pref) . '" placeholder="e.g., 5.3" /> <span class="description">' . esc_html__('Enter as percentage (e.g., 5.3). Leave blank to manage in Advanced JSON.', 'wrd-us-duty') . '</span></td></tr>';
+        echo '<tr><th><label>Commercial Duty Rate (%)</label></th><td><input type="number" step="0.0001" min="0" max="100" name="simple_commercial_pct" value="' . esc_attr($comm_pref) . '" placeholder="e.g., 7" /></td></tr>';
+        $cusma_checked = in_array('CUSMA', $fta_dec_prefill, true) ? 'checked' : '';
+        echo '<tr><th><label>CUSMA</label></th><td><label><input type="checkbox" name="simple_fta_cusma" value="1" ' . $cusma_checked . ' /> ' . esc_html__('Eligible for CUSMA (duty-free into US when applicable)', 'wrd-us-duty') . '</label></td></tr>';
+
+        // Advanced JSON editor (collapsible)
+        echo '<tr><th><label>Advanced JSON</label></th><td>';
+        echo '<details><summary>' . esc_html__('Edit raw US Duty JSON and FTA Flags', 'wrd-us-duty') . '</summary>';
+        echo '<p><label>FTA Flags (JSON array)</label><br/><textarea name="fta_flags" rows="2" class="large-text code">' . esc_textarea($vals['fta_flags']) . '</textarea></p>';
+        echo '<p><label>US Duty JSON</label><br/><textarea name="us_duty_json" rows="8" class="large-text code">' . esc_textarea($vals['us_duty_json']) . '</textarea></p>';
+        echo '<p class="description">' . esc_html__('If you modify JSON here, Simple rates will be ignored for those channels.', 'wrd-us-duty') . '</p>';
+        echo '</details>';
+        echo '</td></tr>';
         echo '<tr><th><label>Effective From</label></th><td><input type="date" name="effective_from" value="' . esc_attr($vals['effective_from']) . '" /></td></tr>';
         echo '<tr><th><label>Effective To</label></th><td><input type="date" name="effective_to" value="' . esc_attr($vals['effective_to']) . '" /></td></tr>';
         echo '<tr><th><label>Notes</label></th><td><textarea name="notes" rows="2" class="large-text">' . esc_textarea($vals['notes']) . '</textarea></td></tr>';
@@ -844,20 +1080,40 @@ class WRD_Admin {
         $country = isset($_POST['country_code']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['country_code']))) : '';
         $hs = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
         $fta = isset($_POST['fta_flags']) ? wp_unslash($_POST['fta_flags']) : '[]';
-        $udj = isset($_POST['us_duty_json']) ? wp_unslash($_POST['us_duty_json']) : '{}';
+        $udj = isset($_POST['us_duty_json']) ? wp_unslash($_POST['us_duty_json']) : '';
         $from = isset($_POST['effective_from']) ? sanitize_text_field(wp_unslash($_POST['effective_from'])) : date('Y-m-d');
         $to = isset($_POST['effective_to']) ? sanitize_text_field(wp_unslash($_POST['effective_to'])) : '';
         $notes = isset($_POST['notes']) ? wp_kses_post(wp_unslash($_POST['notes'])) : '';
+        $simple_postal = isset($_POST['simple_postal_pct']) && $_POST['simple_postal_pct'] !== '' ? (float) wp_unslash($_POST['simple_postal_pct']) : null;
+        $simple_commercial = isset($_POST['simple_commercial_pct']) && $_POST['simple_commercial_pct'] !== '' ? (float) wp_unslash($_POST['simple_commercial_pct']) : null;
+        $simple_cusma = !empty($_POST['simple_fta_cusma']);
 
         // Validate JSON columns
         $fta_dec = json_decode($fta, true);
         if ($fta_dec === null && json_last_error() !== JSON_ERROR_NONE) {
             $fta_dec = [];
         }
-        $udj_dec = json_decode($udj, true);
-        if ($udj_dec === null && json_last_error() !== JSON_ERROR_NONE) {
-            $udj_dec = ['postal' => ['rates' => new stdClass()], 'commercial' => ['rates' => new stdClass()]];
+        $udj_dec = null;
+        if ($udj !== '') {
+            $udj_dec = json_decode($udj, true);
+            if ($udj_dec === null && json_last_error() !== JSON_ERROR_NONE) {
+                $udj_dec = null; // treat as invalid and fall back to simple
+            }
         }
+
+        // Build JSON from Simple mode if provided or when advanced JSON is empty/invalid
+        $uses_simple = ($udj_dec === null);
+        if ($uses_simple) {
+            $udj_dec = ['postal' => ['rates' => new stdClass()], 'commercial' => ['rates' => new stdClass()]];
+            // Accept percentages 0..100; store as percentage values (consistent with compute auto-detect)
+            if ($simple_postal !== null) {
+                $udj_dec['postal']['rates'] = ['base' => (float)$simple_postal];
+            }
+            if ($simple_commercial !== null) {
+                $udj_dec['commercial']['rates'] = ['base' => (float)$simple_commercial];
+            }
+        }
+        if ($simple_cusma && !in_array('CUSMA', $fta_dec, true)) { $fta_dec[] = 'CUSMA'; }
 
         $descNorm = WRD_DB::normalize_description($description);
 
@@ -1192,6 +1448,38 @@ class WRD_Admin {
         echo '<input type="hidden" name="desc_norm" value="' . esc_attr($descNorm) . '" />';
         echo '<input type="hidden" name="cc" value="' . esc_attr($cc) . '" />';
         $table->search_box(__('Search products', 'wrd-us-duty'), 'wrd_impacted');
+        $table->display();
+        echo '</form>';
+    }
+
+    private function render_tab_reconciliation(): void {
+        require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-reconciliation-table.php';
+        echo '<h2>' . esc_html__('Product Reconciliation', 'woocommerce-us-duties') . '</h2>';
+        echo '<p class="description">' . esc_html__('Find products missing classification or without a matching duty profile. Assign an existing group or create a new one.', 'woocommerce-us-duties') . '</p>';
+        $status = isset($_GET['status']) ? sanitize_key($_GET['status']) : 'any_missing';
+        $table = new WRD_Reconciliation_Table($status);
+        echo '<form method="get">';
+        foreach (['page'=>'wrd-customs','tab'=>'reconcile'] as $k=>$v) { echo '<input type="hidden" name="' . esc_attr($k) . '" value="' . esc_attr($v) . '" />'; }
+        // Filters
+        echo '<div class="tablenav top">';
+        echo '<div class="alignleft actions">';
+        echo '<label class="screen-reader-text" for="wrd-status">' . esc_html__('Filter status') . '</label>';
+        echo '<select name="status" id="wrd-status">';
+        $opts = [
+            'any_missing' => __('Any missing', 'woocommerce-us-duties'),
+            'missing_desc' => __('Missing description', 'woocommerce-us-duties'),
+            'missing_origin' => __('Missing origin', 'woocommerce-us-duties'),
+            'no_profile' => __('No matching profile', 'woocommerce-us-duties'),
+        ];
+        foreach ($opts as $key => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($key), selected($status, $key, false), esc_html($label));
+        }
+        echo '</select> ';
+        submit_button(__('Filter'), 'secondary', '', false);
+        echo '</div>';
+        echo '<br class="clear" />';
+        echo '</div>';
+        $table->prepare_items();
         $table->display();
         echo '</form>';
     }

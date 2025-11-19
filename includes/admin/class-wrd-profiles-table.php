@@ -74,8 +74,15 @@ class WRD_Profiles_Table extends WP_List_Table {
         ], admin_url('admin.php'));
         $title = esc_html($item['description_raw']);
         $cc = esc_html($item['country_code']);
+        $cloneUrl = add_query_arg([
+            'page' => 'wrd-customs',
+            'tab' => 'profiles',
+            'action' => 'edit',
+            'clone' => (int)$item['id'],
+        ], admin_url('admin.php'));
         $actions = [
             'edit' => sprintf('<a href="%s">%s</a>', esc_url($editUrl), __('Edit', 'woocommerce-us-duties')),
+            'clone' => sprintf('<a href="%s">%s</a>', esc_url($cloneUrl), __('Clone', 'woocommerce-us-duties')),
         ];
         return sprintf('<strong><a href="%s">%s</a></strong> <span class="description">| %s</span> %s', esc_url($editUrl), $title, $cc, $this->row_actions($actions));
     }

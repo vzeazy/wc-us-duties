@@ -15,6 +15,11 @@
             $(document).on('change', '.bulk-date-action', this.toggleDateInput);
             $(document).on('click', '#wrd-bulk-edit .cancel', this.cancelBulkEdit);
             $(document).on('click', '#doaction, #doaction2', this.handleBulkAction);
+            // Explicitly mark when the bulk edit Update button is used
+            $(document).on('click', 'input[name="bulk_edit"]', function() {
+                var $form = $(this).closest('form');
+                $form.data('wrdBulkSubmit', true);
+            });
             
             // Form submission
             $(document).on('submit', 'form', this.validateBulkSubmission);
@@ -64,6 +69,8 @@
             // Reset form fields
             $('.bulk-date-action').val('');
             $('.bulk-date-input').hide().val('');
+            // Clear any pending bulk submit flags
+            $('form').removeData('wrdBulkSubmit');
             
             return false;
         },
@@ -93,14 +100,32 @@
         validateBulkSubmission: function(e) {
             var $form = $(this);
             
+            // Only run validation when the bulk edit Update button initiated the submit
+            var isBulkSubmit = $form.data('wrdBulkSubmit') === true;
+            // Fallback: if user presses Enter within the bulk edit panel with actions chosen
+            if (!isBulkSubmit) {
+                var bulkPanelVisible = $('#wrd-bulk-edit:visible').length > 0;
+                if (bulkPanelVisible) {
+                    var hasActionChosen = false;
+                    $('#wrd-bulk-edit .bulk-date-action').each(function(){
+                        if ($(this).val() !== '') { hasActionChosen = true; return false; }
+                    });
+                    if (hasActionChosen) {
+                        isBulkSubmit = true;
+                    }
+                }
+            }
+            
             // Only validate if this is a bulk edit submission
-            if (!$form.find('input[name="bulk_edit"]').length) {
+            if (!isBulkSubmit) {
                 return true;
             }
             
             var selectedItems = $('input[name="ids[]"]:checked').length;
             if (selectedItems === 0) {
                 alert(wrdBulkEdit.strings.no_items_selected);
+                // Clear the flag so other submits aren't blocked
+                $form.removeData('wrdBulkSubmit');
                 return false;
             }
             
@@ -115,6 +140,7 @@
             
             if (!hasAction) {
                 alert('Please select at least one date action to perform.');
+                $form.removeData('wrdBulkSubmit');
                 return false;
             }
             
@@ -128,6 +154,7 @@
                     if (!$dateInput.val()) {
                         alert('Please enter a date for the selected action.');
                         $dateInput.focus();
+                        $form.removeData('wrdBulkSubmit');
                         isValid = false;
                         return false;
                     }
@@ -144,6 +171,8 @@
             
             $spinner.addClass('is-active');
             $submitBtn.prop('disabled', true).val(wrdBulkEdit.strings.processing);
+            // Clear flag after successful validation so non-bulk submits work later
+            $form.removeData('wrdBulkSubmit');
             
             return true;
         },
