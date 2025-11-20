@@ -111,16 +111,16 @@ class WRD_Profiles_Table extends WP_List_Table {
     }
 
     protected function column_products($item) {
-        $descNorm = isset($item['description_normalized']) ? (string)$item['description_normalized'] : '';
+        $hs = isset($item['hs_code']) ? (string)$item['hs_code'] : '';
         $cc = isset($item['country_code']) ? strtoupper((string)$item['country_code']) : '';
-        $key = $descNorm . '|' . $cc;
+        $key = $hs . '|' . $cc;
         $count = isset($this->counts[$key]) ? (int)$this->counts[$key] : 0;
-        if ($descNorm === '' || $cc === '') { return '—'; }
+        if ($hs === '' || $cc === '') { return '—'; }
         $url = add_query_arg([
             'page' => 'wrd-customs',
             'tab' => 'profiles',
             'action' => 'impacted',
-            'desc_norm' => rawurlencode($descNorm),
+            'hs_code' => rawurlencode($hs),
             'cc' => $cc,
         ], admin_url('admin.php'));
         return sprintf('<a href="%s">%d</a>', esc_url($url), $count);
@@ -272,9 +272,9 @@ class WRD_Profiles_Table extends WP_List_Table {
             $countsAll = $this->fetch_counts_for_rows($allRows);
             // Attach count and sort
             foreach ($allRows as &$r) {
-                $desc = isset($r['description_normalized']) ? (string)$r['description_normalized'] : '';
+                $hs = isset($r['hs_code']) ? (string)$r['hs_code'] : '';
                 $cc = isset($r['country_code']) ? strtoupper((string)$r['country_code']) : '';
-                $key = $desc . '|' . $cc;
+                $key = $hs . '|' . $cc;
                 $r['__impacted_cnt'] = isset($countsAll[$key]) ? (int)$countsAll[$key] : 0;
             }
             unset($r);
@@ -329,10 +329,10 @@ class WRD_Profiles_Table extends WP_List_Table {
         global $wpdb;
         $pairs = [];
         foreach ($rows as $r) {
-            $desc = isset($r['description_normalized']) ? (string)$r['description_normalized'] : '';
+            $hs = isset($r['hs_code']) ? (string)$r['hs_code'] : '';
             $cc = isset($r['country_code']) ? strtoupper((string)$r['country_code']) : '';
-            if ($desc !== '' && $cc !== '') {
-                $pairs[$desc . '|' . $cc] = [$desc, $cc];
+            if ($hs !== '' && $cc !== '') {
+                $pairs[$hs . '|' . $cc] = [$hs, $cc];
             }
         }
         if (empty($pairs)) { return []; }
@@ -340,28 +340,28 @@ class WRD_Profiles_Table extends WP_List_Table {
         // Build OR conditions for pairs
         $conds = [];
         $params = [];
-        foreach ($pairs as [$desc, $cc]) {
-            $conds[] = '(d.meta_value = %s AND c.meta_value = %s)';
-            $params[] = $desc; $params[] = $cc;
+        foreach ($pairs as [$hs, $cc]) {
+            $conds[] = '(h.meta_value = %s AND c.meta_value = %s)';
+            $params[] = $hs; $params[] = $cc;
         }
         $wherePairs = implode(' OR ', $conds);
 
         $post_types = [ 'product', 'product_variation' ];
         $inTypes = implode("','", array_map('esc_sql', $post_types));
 
-        $sql = "SELECT d.meta_value AS desc_norm, c.meta_value AS cc, COUNT(p.ID) AS cnt
+        $sql = "SELECT h.meta_value AS hs_code, c.meta_value AS cc, COUNT(p.ID) AS cnt
                 FROM {$wpdb->posts} p
-                INNER JOIN {$wpdb->postmeta} d ON (d.post_id = p.ID AND d.meta_key = '_wrd_desc_norm')
-                INNER JOIN {$wpdb->postmeta} c ON (c.post_id = p.ID AND c.meta_key = '_wrd_origin_cc')
+                INNER JOIN {$wpdb->postmeta} h ON (h.post_id = p.ID AND h.meta_key = '_hs_code')
+                INNER JOIN {$wpdb->postmeta} c ON (c.post_id = p.ID AND c.meta_key = '_country_of_origin')
                 WHERE p.post_type IN ('{$inTypes}')
                   AND p.post_status NOT IN ('trash','auto-draft')
                   AND ({$wherePairs})
-                GROUP BY d.meta_value, c.meta_value";
+                GROUP BY h.meta_value, c.meta_value";
         $prepared = $wpdb->prepare($sql, $params);
         $rows = $wpdb->get_results($prepared, ARRAY_A);
         $map = [];
         foreach ($rows as $r) {
-            $map[(string)$r['desc_norm'] . '|' . strtoupper((string)$r['cc'])] = (int)$r['cnt'];
+            $map[(string)$r['hs_code'] . '|' . strtoupper((string)$r['cc'])] = (int)$r['cnt'];
         }
         return $map;
     }

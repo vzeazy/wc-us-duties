@@ -6,17 +6,17 @@ if (!class_exists('WP_List_Table')) {
 }
 
 class WRD_Impacted_Products_Table extends WP_List_Table {
-    private $desc_norm;
+    private $hs_code;
     private $cc;
     private $search = '';
 
-    public function __construct(string $desc_norm, string $cc) {
+    public function __construct(string $hs_code, string $cc) {
         parent::__construct([
             'singular' => 'wrd_impacted_product',
             'plural'   => 'wrd_impacted_products',
             'ajax'     => false,
         ]);
-        $this->desc_norm = $desc_norm;
+        $this->hs_code = $hs_code;
         $this->cc = strtoupper($cc);
         $this->search = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
     }
@@ -29,7 +29,7 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
             'sku' => __('SKU', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
             'stock' => __('Stock', 'woocommerce-us-duties'),
-            'desc' => __('Description', 'woocommerce-us-duties'),
+            'desc' => __('HS Code', 'woocommerce-us-duties'),
         ];
     }
 
@@ -48,7 +48,7 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
                     return '<span class="status-backorder" style="color:#d98300;">' . esc_html__('Backorder', 'woocommerce-us-duties') . '</span>';
                 }
                 return '';
-            case 'desc': return esc_html($item['desc']);
+            case 'desc': return esc_html($item['hs_code']);
         }
         return '';
     }
@@ -115,9 +115,9 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
 
         $where = $wpdb->prepare(
             "p.post_type IN ('{$inTypes}') AND p.post_status NOT IN ('trash','auto-draft')
-             AND d.meta_key='_wrd_desc_norm' AND d.meta_value=%s
-             AND c.meta_key='_wrd_origin_cc' AND c.meta_value=%s",
-            $this->desc_norm, $this->cc
+             AND h.meta_key='_hs_code' AND h.meta_value=%s
+             AND c.meta_key='_country_of_origin' AND c.meta_value=%s",
+            $this->hs_code, $this->cc
         );
 
         $searchSql = '';
@@ -128,24 +128,20 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
         }
 
         $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} d ON d.post_id=p.ID
+            INNER JOIN {$wpdb->postmeta} h ON h.post_id=p.ID
             INNER JOIN {$wpdb->postmeta} c ON c.post_id=p.ID
             LEFT JOIN {$wpdb->postmeta} sku ON (sku.post_id=p.ID AND sku.meta_key='_sku')
             WHERE {$where}{$searchSql}");
 
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT p.ID, p.post_title, p.post_type,
-                    COALESCE(vdesc.meta_value, pdesc.meta_value) AS desc_raw,
-                    COALESCE(vorg.meta_value, porg.meta_value) AS origin,
+                    h.meta_value AS hs_code,
+                    c.meta_value AS origin,
                     sku.meta_value AS sku,
                     stock.meta_value AS stock_status
              FROM {$wpdb->posts} p
-             INNER JOIN {$wpdb->postmeta} d ON d.post_id=p.ID
-             INNER JOIN {$wpdb->postmeta} c ON c.post_id=p.ID
-             LEFT JOIN {$wpdb->postmeta} pdesc ON (pdesc.post_id = CASE WHEN p.post_type='product' THEN p.ID ELSE p.post_parent END AND pdesc.meta_key='_customs_description')
-             LEFT JOIN {$wpdb->postmeta} porg ON (porg.post_id = CASE WHEN p.post_type='product' THEN p.ID ELSE p.post_parent END AND porg.meta_key='_country_of_origin')
-             LEFT JOIN {$wpdb->postmeta} vdesc ON (vdesc.post_id = p.ID AND vdesc.meta_key='_customs_description')
-             LEFT JOIN {$wpdb->postmeta} vorg ON (vorg.post_id = p.ID AND vorg.meta_key='_country_of_origin')
+             INNER JOIN {$wpdb->postmeta} h ON (h.post_id=p.ID AND h.meta_key='_hs_code')
+             INNER JOIN {$wpdb->postmeta} c ON (c.post_id=p.ID AND c.meta_key='_country_of_origin')
              LEFT JOIN {$wpdb->postmeta} sku ON (sku.post_id=p.ID AND sku.meta_key='_sku')
              LEFT JOIN {$wpdb->postmeta} stock ON (stock.post_id=p.ID AND stock.meta_key='_stock_status')
              WHERE {$where}{$searchSql}
@@ -163,7 +159,7 @@ class WRD_Impacted_Products_Table extends WP_List_Table {
                 'sku' => (string)$r['sku'],
                 'origin' => strtoupper((string)$r['origin']),
                 'stock' => (string)$r['stock_status'],
-                'desc' => (string)$r['desc_raw'],
+                'hs_code' => (string)$r['hs_code'],
             ];
         }
 

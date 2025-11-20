@@ -19,6 +19,9 @@ class WRD_Admin {
         add_action('woocommerce_cart_calculate_fees', [$this, 'add_estimated_duties_fee']);
         add_action('woocommerce_checkout_create_order', [$this, 'snapshot_duties_to_order'], 10, 2);
 
+        // Order admin: display duty snapshot
+        add_action('woocommerce_admin_order_data_after_order_details', [$this, 'display_order_duty_snapshot']);
+
         // Admin menu
         add_action('admin_menu', [$this, 'admin_menu']);
 
@@ -185,6 +188,118 @@ class WRD_Admin {
         $estimate['currency'] = WRD_Duty_Engine::current_currency();
         $estimate['timestamp'] = time();
         $order->update_meta_data('_wrd_duty_snapshot', wp_json_encode($estimate));
+    }
+
+    public function display_order_duty_snapshot($order): void {
+        $snapshot_json = $order->get_meta('_wrd_duty_snapshot');
+        if (!$snapshot_json) {
+            return;
+        }
+
+        $snapshot = json_decode($snapshot_json, true);
+        if (!$snapshot || !isset($snapshot['lines'])) {
+            return;
+        }
+
+        echo '<div class="wrd-order-duty-snapshot" style="margin-top: 20px;">';
+        echo '<h3>' . esc_html__('US Duty Breakdown', 'woocommerce-us-duties') . '</h3>';
+
+        // Summary information
+        echo '<div style="margin-bottom: 15px;">';
+        if (isset($snapshot['timestamp'])) {
+            echo '<p><strong>' . esc_html__('Calculated:', 'woocommerce-us-duties') . '</strong> ';
+            echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $snapshot['timestamp']));
+            echo '</p>';
+        }
+        if (isset($snapshot['currency'])) {
+            echo '<p><strong>' . esc_html__('Currency:', 'woocommerce-us-duties') . '</strong> ' . esc_html($snapshot['currency']) . '</p>';
+        }
+        echo '</div>';
+
+        // Product line items table
+        echo '<table class="wp-list-table widefat fixed striped" style="margin-bottom: 15px;">';
+        echo '<thead><tr>';
+        echo '<th>' . esc_html__('Product', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('HS Code', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('Origin', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('Channel', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('Rate', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('Value (USD)', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('Duty (USD)', 'woocommerce-us-duties') . '</th>';
+        echo '<th>' . esc_html__('CUSMA', 'woocommerce-us-duties') . '</th>';
+        echo '</tr></thead>';
+        echo '<tbody>';
+
+        foreach ($snapshot['lines'] as $line) {
+            $product_id = $line['product_id'] ?? 0;
+            $product = wc_get_product($product_id);
+            $product_name = $product ? $product->get_name() : __('Unknown Product', 'woocommerce-us-duties');
+
+            $hs_code = $line['debug']['hs_code'] ?? '-';
+            $origin = $line['origin'] ?? '-';
+            $channel = $line['channel'] ?? '-';
+            $rate = isset($line['rate_pct']) ? number_format($line['rate_pct'], 2) . '%' : '-';
+            $value = isset($line['value_usd']) ? '$' . number_format($line['value_usd'], 2) : '-';
+            $duty = isset($line['duty_usd']) ? '$' . number_format($line['duty_usd'], 2) : '-';
+            $cusma = !empty($line['cusma']) ? '✓' : '-';
+
+            echo '<tr>';
+            echo '<td>' . esc_html($product_name) . '</td>';
+            echo '<td>' . esc_html($hs_code) . '</td>';
+            echo '<td>' . esc_html($origin) . '</td>';
+            echo '<td>' . esc_html(ucfirst($channel)) . '</td>';
+            echo '<td>' . esc_html($rate) . '</td>';
+            echo '<td>' . esc_html($value) . '</td>';
+            echo '<td>' . esc_html($duty) . '</td>';
+            echo '<td>' . esc_html($cusma) . '</td>';
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+
+        // Totals section
+        echo '<div style="background: #f5f5f5; padding: 10px; border-left: 4px solid #2271b1;">';
+
+        if (isset($snapshot['composition'])) {
+            $comp = $snapshot['composition'];
+            echo '<p style="margin: 5px 0;"><strong>' . esc_html__('CUSMA Duty-Free Value:', 'woocommerce-us-duties') . '</strong> ';
+            echo '$' . number_format($comp['cusma_value_usd'] ?? 0, 2) . '</p>';
+            echo '<p style="margin: 5px 0;"><strong>' . esc_html__('Dutiable Value:', 'woocommerce-us-duties') . '</strong> ';
+            echo '$' . number_format($comp['non_cusma_value_usd'] ?? 0, 2) . '</p>';
+        }
+
+        if (isset($snapshot['total_usd'])) {
+            echo '<p style="margin: 5px 0;"><strong>' . esc_html__('Total Duties:', 'woocommerce-us-duties') . '</strong> ';
+            echo '$' . number_format($snapshot['total_usd'], 2) . '</p>';
+        }
+
+        if (isset($snapshot['fees']) && !empty($snapshot['fees'])) {
+            foreach ($snapshot['fees'] as $fee) {
+                echo '<p style="margin: 5px 0;"><strong>' . esc_html($fee['label']) . ':</strong> ';
+                echo '$' . number_format($fee['amount_usd'], 2) . '</p>';
+            }
+        }
+
+        if (isset($snapshot['fees_usd'])) {
+            echo '<p style="margin: 5px 0;"><strong>' . esc_html__('Total Fees:', 'woocommerce-us-duties') . '</strong> ';
+            echo '$' . number_format($snapshot['fees_usd'], 2) . '</p>';
+        }
+
+        $grand_total = ($snapshot['total_usd'] ?? 0) + ($snapshot['fees_usd'] ?? 0);
+        echo '<p style="margin: 10px 0 5px 0; font-size: 1.1em;"><strong>' . esc_html__('Grand Total (USD):', 'woocommerce-us-duties') . '</strong> ';
+        echo '$' . number_format($grand_total, 2) . '</p>';
+
+        echo '</div>';
+
+        // Debug info (collapsible)
+        if (isset($snapshot['missing_profiles']) && $snapshot['missing_profiles'] > 0) {
+            echo '<details style="margin-top: 10px;">';
+            echo '<summary style="cursor: pointer; color: #d63638;"><strong>' . esc_html__('⚠ Missing Profiles', 'woocommerce-us-duties') . '</strong></summary>';
+            echo '<p>' . sprintf(esc_html__('%d product(s) did not have matching duty profiles.', 'woocommerce-us-duties'), (int) $snapshot['missing_profiles']) . '</p>';
+            echo '</details>';
+        }
+
+        echo '</div>';
     }
 
     public function admin_menu(): void {
@@ -1946,22 +2061,22 @@ class WRD_Admin {
     }
 
     private function render_impacted_products_page(): void {
-        $descNorm = isset($_GET['desc_norm']) ? sanitize_text_field(wp_unslash($_GET['desc_norm'])) : '';
+        $hsCode = isset($_GET['hs_code']) ? sanitize_text_field(wp_unslash($_GET['hs_code'])) : '';
         $cc = isset($_GET['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_GET['cc']))) : '';
-        if ($descNorm === '' || $cc === '') { echo '<p>' . esc_html__('Missing filter parameters.', 'wrd-us-duty') . '</p>'; return; }
+        if ($hsCode === '' || $cc === '') { echo '<p>' . esc_html__('Missing filter parameters.', 'wrd-us-duty') . '</p>'; return; }
 
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-impacted-products-table.php';
-        $table = new WRD_Impacted_Products_Table($descNorm, $cc);
+        $table = new WRD_Impacted_Products_Table($hsCode, $cc);
         // Handle bulk actions only on POST to avoid conflicting with page query arg 'action=impacted'
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $table->process_bulk_action();
         }
         $table->prepare_items();
-        echo '<h2>' . esc_html(sprintf(__('Impacted Products — %s (%s)', 'wrd-us-duty'), $descNorm, $cc)) . '</h2>';
+        echo '<h2>' . esc_html(sprintf(__('Impacted Products — %s (%s)', 'wrd-us-duty'), $hsCode, $cc)) . '</h2>';
         echo '<form method="post">';
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
-        echo '<input type="hidden" name="desc_norm" value="' . esc_attr($descNorm) . '" />';
+        echo '<input type="hidden" name="hs_code" value="' . esc_attr($hsCode) . '" />';
         echo '<input type="hidden" name="cc" value="' . esc_attr($cc) . '" />';
         $table->search_box(__('Search products', 'wrd-us-duty'), 'wrd_impacted');
         $table->display();
