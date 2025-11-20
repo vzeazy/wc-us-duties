@@ -25,8 +25,9 @@ class WRD_Profiles_Table extends WP_List_Table {
             'country_code' => __('Country', 'woocommerce-us-duties'),
             'hs_code' => __('HS', 'woocommerce-us-duties'),
             'products' => __('Products', 'woocommerce-us-duties'),
-            'effective_from' => __('From', 'woocommerce-us-duties'),
-            'effective_to' => __('To', 'woocommerce-us-duties'),
+            'active' => __('Active', 'woocommerce-us-duties'),
+            'postal_rate' => __('Postal %', 'woocommerce-us-duties'),
+            'commercial_rate' => __('Commercial %', 'woocommerce-us-duties'),
             'notes' => __('Notes', 'woocommerce-us-duties'),
         ];
     }
@@ -37,7 +38,7 @@ class WRD_Profiles_Table extends WP_List_Table {
             'country_code' => ['country_code', false],
             'hs_code' => ['hs_code', false],
             'products' => ['products', false],
-            'effective_from' => ['effective_from', false],
+            'active' => ['effective_from', false],
         ];
     }
 
@@ -47,9 +48,31 @@ class WRD_Profiles_Table extends WP_List_Table {
                 return esc_html(strtoupper((string)($item['country_code'] ?? '')));
             case 'hs_code':
                 return esc_html((string)($item['hs_code'] ?? ''));
-            case 'effective_from':
-            case 'effective_to':
-                return esc_html((string)($item[$column_name] ?? ''));
+            case 'active':
+                $now = current_time('mysql');
+                $today = substr($now, 0, 10);
+                $from = isset($item['effective_from']) ? (string) $item['effective_from'] : '';
+                $to = isset($item['effective_to']) ? (string) $item['effective_to'] : '';
+                $is_active = true;
+                if ($from !== '' && $today < $from) {
+                    $is_active = false;
+                }
+                if ($to !== '' && $today > $to) {
+                    $is_active = false;
+                }
+                return $is_active ? esc_html__('Active', 'woocommerce-us-duties') : esc_html__('Inactive', 'woocommerce-us-duties');
+            case 'postal_rate':
+            case 'commercial_rate':
+                // Expect computed aliases from query; format as percentage with up to 4 decimals
+                $key = $column_name;
+                if (!isset($item[$key])) {
+                    return '—';
+                }
+                $val = (float) $item[$key];
+                if ($val === 0.0) {
+                    return '0';
+                }
+                return esc_html(rtrim(rtrim(number_format($val, 4, '.', ''), '0'), '.') );
             case 'notes':
                 $notes = (string)($item['notes'] ?? '');
                 if ($notes === '') { return ''; }
@@ -231,7 +254,7 @@ class WRD_Profiles_Table extends WP_List_Table {
 
         $orderby = isset($_REQUEST['orderby']) ? sanitize_key($_REQUEST['orderby']) : 'id';
         $order = (isset($_REQUEST['order']) && strtolower($_REQUEST['order']) === 'asc') ? 'ASC' : 'DESC';
-        $allowed = ['id','description_raw','country_code','hs_code','effective_from','products'];
+        $allowed = ['id','description_raw','country_code','hs_code','products','effective_from'];
         if (!in_array($orderby, $allowed, true)) { $orderby = 'id'; }
 
         $total = (int) $wpdb->get_var($params
@@ -273,6 +296,22 @@ class WRD_Profiles_Table extends WP_List_Table {
             $rows = $params
                 ? $wpdb->get_results($wpdb->prepare($sql, array_merge($params, [$per_page, $offset])), ARRAY_A)
                 : $wpdb->get_results($wpdb->prepare($sql, $per_page, $offset), ARRAY_A);
+
+            // Compute preview duty rates (percent) for each row
+            foreach ($rows as &$row) {
+                $udj = [];
+                if (isset($row['us_duty_json'])) {
+                    $udj = is_array($row['us_duty_json']) ? $row['us_duty_json'] : json_decode((string) $row['us_duty_json'], true);
+                }
+                if (!is_array($udj)) {
+                    $row['postal_rate'] = 0.0;
+                    $row['commercial_rate'] = 0.0;
+                } else {
+                    $row['postal_rate'] = WRD_Duty_Engine::compute_rate_percent($udj, 'postal');
+                    $row['commercial_rate'] = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
+                }
+            }
+            unset($row);
 
             $this->items = $rows;
             $this->counts = $this->fetch_counts_for_rows($rows);
