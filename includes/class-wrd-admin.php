@@ -25,6 +25,7 @@ class WRD_Admin {
         // Products list: customs status column
         add_filter('manage_edit-product_columns', [$this, 'add_product_customs_column']);
         add_action('manage_product_posts_custom_column', [$this, 'render_product_customs_column'], 10, 2);
+        add_filter('post_row_actions', [$this, 'add_assign_profile_row_action'], 10, 2);
 
         // Quick Edit / Bulk Edit fields
         add_action('quick_edit_custom_box', [$this, 'quick_bulk_edit_box'], 10, 2);
@@ -38,8 +39,10 @@ class WRD_Admin {
         // Admin assets and AJAX for profile search
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_wrd_search_profiles', [$this, 'ajax_search_profiles']);
-    add_action('wp_ajax_wrd_reconcile_assign', [$this, 'ajax_reconcile_assign']);
-    add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
+        add_action('wp_ajax_wrd_reconcile_assign', [$this, 'ajax_reconcile_assign']);
+        add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
+        add_action('wp_ajax_wrd_quick_assign_profile', [$this, 'ajax_quick_assign_profile']);
+        add_action('admin_footer', [$this, 'render_inline_assign_template']);
 
         // Redirect legacy admin page slugs
         add_action('admin_init', [$this, 'redirect_legacy_pages']);
@@ -598,6 +601,115 @@ class WRD_Admin {
         }
     }
 
+    // Add "Assign Profile" row action to products
+    public function add_assign_profile_row_action($actions, $post) {
+        if ($post->post_type !== 'product') {
+            return $actions;
+        }
+
+        // Add the action after "Quick Edit"
+        $new_actions = [];
+        foreach ($actions as $key => $value) {
+            $new_actions[$key] = $value;
+            if ($key === 'inline hide-if-no-js') {
+                $new_actions['wrd_assign_profile'] = sprintf(
+                    '<a href="#" class="wrd-assign-profile-action" data-product-id="%d">%s</a>',
+                    $post->ID,
+                    esc_html__('Assign Profile', 'wrd-us-duty')
+                );
+            }
+        }
+        return $new_actions;
+    }
+
+    // Render inline assign profile template in admin footer (only on products page)
+    public function render_inline_assign_template() {
+        $screen = get_current_screen();
+        if (!$screen || $screen->id !== 'edit-product') {
+            return;
+        }
+        ?>
+        <table id="wrd-inline-assign-template" style="display:none;">
+            <tbody>
+                <tr id="wrd-inline-assign-row" class="inline-edit-row inline-edit-row-post quick-edit-row quick-edit-row-post inline-edit-product">
+                    <td colspan="10" class="colspanchange">
+                        <fieldset class="inline-edit-col-left" style="width: 100%;">
+                            <legend class="inline-edit-legend"><?php esc_html_e('Assign Profile', 'wrd-us-duty'); ?></legend>
+                            <div class="inline-edit-col" style="display: flex; gap: 12px; align-items: center;">
+                                <label style="flex: 1;">
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Profile', 'wrd-us-duty'); ?></span>
+                                    <input type="text" class="wrd-profile-lookup" placeholder="<?php esc_attr_e('Search by HS code or description...', 'wrd-us-duty'); ?>" style="width: 300px;" />
+                                </label>
+                                <label>
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('HS Code', 'wrd-us-duty'); ?></span>
+                                    <input type="text" class="wrd-hs-code" placeholder="<?php esc_attr_e('e.g., 8206.00.0000', 'wrd-us-duty'); ?>" style="width: 140px;" />
+                                </label>
+                                <label>
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Country', 'wrd-us-duty'); ?></span>
+                                    <input type="text" class="wrd-country" placeholder="<?php esc_attr_e('CC', 'wrd-us-duty'); ?>" maxlength="2" style="width: 60px;" />
+                                </label>
+                                <div style="margin-left: auto;">
+                                    <button type="button" class="button button-primary wrd-apply-assign"><?php esc_html_e('Apply', 'wrd-us-duty'); ?></button>
+                                    <button type="button" class="button wrd-cancel-assign"><?php esc_html_e('Cancel', 'wrd-us-duty'); ?></button>
+                                    <span class="spinner" style="float: none; margin: 0 0 0 8px;"></span>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <?php
+    }
+
+    // AJAX handler for quick profile assignment from products table
+    public function ajax_quick_assign_profile() {
+        check_ajax_referer('wrd_quick_assign', 'nonce');
+
+        if (!current_user_can('edit_products')) {
+            wp_send_json_error(['message' => 'Unauthorized'], 403);
+        }
+
+        $product_id = isset($_POST['product_id']) ? absint($_POST['product_id']) : 0;
+        $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
+        $country = isset($_POST['country']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['country']))) : '';
+
+        if (!$product_id || !$hs_code || !$country) {
+            wp_send_json_error(['message' => 'Missing required fields'], 400);
+        }
+
+        $product = wc_get_product($product_id);
+        if (!$product) {
+            wp_send_json_error(['message' => 'Product not found'], 404);
+        }
+
+        // Update product meta
+        $product->update_meta_data('_hs_code', $hs_code);
+        $product->update_meta_data('_country_of_origin', $country);
+
+        // Look up and link profile if available
+        $profile = WRD_DB::get_profile_by_hs_country($hs_code, $country);
+        if ($profile && isset($profile['id'])) {
+            $product->update_meta_data('_wrd_profile_id', (int)$profile['id']);
+        }
+
+        $product->save();
+
+        // Update normalized meta
+        if ($product->is_type('variation')) {
+            $this->update_normalized_meta_for_variation($product_id);
+        } else {
+            $this->update_normalized_meta_for_product($product_id);
+        }
+
+        wp_send_json_success([
+            'message' => 'Profile assigned successfully',
+            'hs_code' => $hs_code,
+            'country' => $country,
+            'has_profile' => !empty($profile)
+        ]);
+    }
+
     // --- Quick/Bulk edit fields and handler ---
     public function quick_bulk_edit_box($column_name, $post_type) {
         if ($post_type !== 'product') { return; }
@@ -668,6 +780,20 @@ class WRD_Admin {
             wp_localize_script('wrd-admin-quick-bulk', 'WRDProfiles', [
                 'ajax' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('wrd_search_profiles'),
+            ]);
+
+            // Inline assign profile
+            wp_enqueue_script(
+                'wrd-admin-inline-assign',
+                WRD_US_DUTY_URL . 'assets/admin-inline-assign.js',
+                ['jquery','jquery-ui-autocomplete'],
+                WRD_US_DUTY_VERSION,
+                true
+            );
+            wp_localize_script('wrd-admin-inline-assign', 'WRDInlineAssign', [
+                'ajax' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('wrd_quick_assign'),
+                'searchNonce' => wp_create_nonce('wrd_search_profiles'),
             ]);
             return;
         }
