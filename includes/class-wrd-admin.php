@@ -269,7 +269,7 @@ class WRD_Admin {
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-profiles-table.php';
         $table = new WRD_Profiles_Table();
         $table->process_bulk_action();
-        echo '<form method="post">';
+        echo '<form method="post" id="wrd-profiles-form" data-wrd-bulk-form="1">';
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
         $table->prepare_items();
@@ -1538,22 +1538,39 @@ class WRD_Admin {
         $udj_dec = null;
         if ($udj !== '') {
             $udj_dec = json_decode($udj, true);
-            if ($udj_dec === null && json_last_error() !== JSON_ERROR_NONE) {
-                $udj_dec = null; // treat as invalid and fall back to simple
+            if (!is_array($udj_dec) || (json_last_error() !== JSON_ERROR_NONE && $udj_dec === null)) {
+                $udj_dec = null;
             }
         }
 
-        // Build JSON from Simple mode if provided or when advanced JSON is empty/invalid
-        $uses_simple = ($udj_dec === null);
-        if ($uses_simple) {
-            $udj_dec = ['postal' => ['rates' => new stdClass()], 'commercial' => ['rates' => new stdClass()]];
-            // Accept percentages 0..100; store as percentage values (consistent with compute auto-detect)
-            if ($simple_postal !== null) {
-                $udj_dec['postal']['rates'] = ['base' => (float)$simple_postal];
-            }
-            if ($simple_commercial !== null) {
-                $udj_dec['commercial']['rates'] = ['base' => (float)$simple_commercial];
-            }
+        // Ensure base structure for JSON
+        if (!is_array($udj_dec)) {
+            $udj_dec = [
+                'postal' => ['rates' => new stdClass()],
+                'commercial' => ['rates' => new stdClass()],
+            ];
+        }
+
+        // Normalise nested structures
+        if (!isset($udj_dec['postal']) || !is_array($udj_dec['postal'])) {
+            $udj_dec['postal'] = ['rates' => new stdClass()];
+        }
+        if (!isset($udj_dec['postal']['rates']) || !is_array($udj_dec['postal']['rates'])) {
+            $udj_dec['postal']['rates'] = [];
+        }
+        if (!isset($udj_dec['commercial']) || !is_array($udj_dec['commercial'])) {
+            $udj_dec['commercial'] = ['rates' => new stdClass()];
+        }
+        if (!isset($udj_dec['commercial']['rates']) || !is_array($udj_dec['commercial']['rates'])) {
+            $udj_dec['commercial']['rates'] = [];
+        }
+
+        // Apply simple-mode overrides when present
+        if ($simple_postal !== null) {
+            $udj_dec['postal']['rates']['base'] = (float) $simple_postal;
+        }
+        if ($simple_commercial !== null) {
+            $udj_dec['commercial']['rates']['base'] = (float) $simple_commercial;
         }
         if ($simple_cusma && !in_array('CUSMA', $fta_dec, true)) { $fta_dec[] = 'CUSMA'; }
 

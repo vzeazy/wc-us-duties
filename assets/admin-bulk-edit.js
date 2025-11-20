@@ -21,8 +21,8 @@
                 $form.data('wrdBulkSubmit', true);
             });
             
-            // Form submission
-            $(document).on('submit', 'form', this.validateBulkSubmission);
+            // Form submission (only on profiles bulk-edit form)
+            $(document).on('submit', 'form[data-wrd-bulk-form="1"]', this.validateBulkSubmission);
         },
 
         toggleBulkEdit: function() {
