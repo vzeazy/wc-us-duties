@@ -58,20 +58,39 @@ class WRD_Admin {
 
         echo '<div class="options_group wrd-customs-fields">';
 
-        // Profile autocomplete lookup field
         echo '<p class="form-field">';
         echo '<label>' . esc_html__('Profile Lookup', 'woocommerce-us-duties') . '</label>';
         echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search profiles...', 'woocommerce-us-duties') . '" />';
         echo '<span class="description">' . esc_html__('Search by HS code, country, or description to auto-populate fields below.', 'woocommerce-us-duties') . '</span>';
         echo '</p>';
 
+        // Get effective values with category fallback
+        $effective = WRD_Category_Settings::get_effective_hs_code($product);
+        $current_hs = $product->get_meta('_hs_code', true);
+        $current_origin = $product->get_meta('_country_of_origin', true);
+        
+        // Build placeholder/description based on inheritance
+        $hs_placeholder = '4016931000';
+        $hs_desc = __('Harmonized System code for this product (primary identifier for duty lookup).', 'woocommerce-us-duties');
+        if (!$current_hs && $effective['hs_code'] && $effective['source'] !== 'product') {
+            $hs_placeholder = $effective['hs_code'];
+            $hs_desc .= ' ' . sprintf(__('Will inherit "%s" from %s if left empty.', 'woocommerce-us-duties'), $effective['hs_code'], $effective['source']);
+        }
+        
+        $origin_placeholder = 'CN';
+        $origin_desc = __('ISO-2 country code, e.g., CA, CN, TW.', 'woocommerce-us-duties');
+        if (!$current_origin && $effective['origin'] && $effective['source'] !== 'product') {
+            $origin_placeholder = $effective['origin'];
+            $origin_desc .= ' ' . sprintf(__('Will inherit "%s" from %s if left empty.', 'woocommerce-us-duties'), $effective['origin'], $effective['source']);
+        }
+
         // HS Code field (primary identifier)
         woocommerce_wp_text_input([
             'id' => '_hs_code',
             'label' => __('HS Code', 'woocommerce-us-duties'),
             'desc_tip' => true,
-            'description' => __('Harmonized System code for this product (primary identifier for duty lookup).', 'woocommerce-us-duties'),
-            'placeholder' => '4016931000',
+            'description' => $hs_desc,
+            'placeholder' => $hs_placeholder,
         ]);
 
         // Country of Origin
@@ -79,8 +98,8 @@ class WRD_Admin {
             'id' => '_country_of_origin',
             'label' => __('Country of Origin (ISO-2)', 'woocommerce-us-duties'),
             'desc_tip' => true,
-            'description' => __('ISO-2 country code, e.g., CA, CN, TW.', 'woocommerce-us-duties'),
-            'placeholder' => 'CN',
+            'description' => $origin_desc,
+            'placeholder' => $origin_placeholder,
             'maxlength' => 2,
         ]);
 
@@ -343,12 +362,27 @@ class WRD_Admin {
     public function admin_menu(): void {
         add_submenu_page(
             'woocommerce',
+            __('Duty Manager', 'wrd-us-duty'),
+            __('Duty Manager', 'wrd-us-duty'),
+            'manage_woocommerce',
+            'wrd-duty-manager',
+            [$this, 'render_duty_manager']
+        );
+        
+        add_submenu_page(
+            'woocommerce',
             __('Customs & Duties', 'wrd-us-duty'),
             __('Customs & Duties', 'wrd-us-duty'),
             'manage_woocommerce',
             'wrd-customs',
             [$this, 'render_customs_hub']
         );
+    }
+    
+    public function render_duty_manager(): void {
+        require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-duty-manager.php';
+        $manager = new WRD_Duty_Manager();
+        $manager->render_page();
     }
 
 

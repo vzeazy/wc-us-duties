@@ -13,6 +13,8 @@ class WRD_US_Duty_Plugin {
     public function init(): void {
         // Ensure DB is up to date
         WRD_DB::maybe_upgrade();
+        // Category settings
+        (new WRD_Category_Settings())->init();
         // Admin features
         $this->admin = new WRD_Admin();
         $this->admin->init();

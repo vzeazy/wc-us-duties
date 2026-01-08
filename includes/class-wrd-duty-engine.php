@@ -129,32 +129,20 @@ class WRD_Duty_Engine {
             $value = (float) $product->get_price() * $qty; // store currency
             $valueUsd = self::to_usd($value, $currency);
 
-            // Get HS code and origin from product
-            $hs_code = $product->get_meta('_hs_code', true);
-            $origin = $product->get_meta('_country_of_origin', true);
+            // Get HS code and origin with category fallback
+            $effective = WRD_Category_Settings::get_effective_hs_code($product);
+            $hs_code = $effective['hs_code'];
+            $origin = $effective['origin'];
 
             // Fallback to legacy _customs_description for backward compatibility
             $desc = $product->get_meta('_customs_description', true);
-
             if ($product->is_type('variation')) {
                 $parent = wc_get_product($product->get_parent_id());
-                if ($parent) {
-                    if ($origin === '') {
-                        $origin = $parent->get_meta('_country_of_origin', true) ?: $origin;
-                    }
-                    if ($hs_code === '') {
-                        $hs_code = $parent->get_meta('_hs_code', true) ?: $hs_code;
-                    }
-                    if ($desc === '') {
-                        $desc = $parent->get_meta('_customs_description', true) ?: $desc;
-                    }
+                if ($parent && $desc === '') {
+                    $desc = $parent->get_meta('_customs_description', true) ?: $desc;
                 }
             }
-
-            // Normalize
-            $hs_code = is_string($hs_code) ? trim($hs_code) : '';
             $desc = is_string($desc) ? trim($desc) : '';
-            $origin = is_string($origin) ? strtoupper(trim($origin)) : '';
 
             // Lookup profile: prefer HS code + country, fallback to description + country
             $profile = null;
@@ -260,31 +248,20 @@ class WRD_Duty_Engine {
         if (!$product instanceof \WC_Product) { return null; }
         $settings = get_option(WRD_Settings::OPTION, []);
         $currency = self::current_currency();
-        // Get HS code and origin from product
-        $hs_code = $product->get_meta('_hs_code', true);
-        $origin = $product->get_meta('_country_of_origin', true);
+        // Get HS code and origin with category fallback
+        $effective = WRD_Category_Settings::get_effective_hs_code($product);
+        $hs_code = $effective['hs_code'];
+        $origin = $effective['origin'];
 
         // Fallback to legacy _customs_description for backward compatibility
         $desc = $product->get_meta('_customs_description', true);
-
         if ($product->is_type('variation')) {
             $parent = wc_get_product($product->get_parent_id());
-            if ($parent) {
-                if ($origin === '') {
-                    $origin = $parent->get_meta('_country_of_origin', true) ?: $origin;
-                }
-                if ($hs_code === '') {
-                    $hs_code = $parent->get_meta('_hs_code', true) ?: $hs_code;
-                }
-                if ($desc === '') {
-                    $desc = $parent->get_meta('_customs_description', true) ?: $desc;
-                }
+            if ($parent && $desc === '') {
+                $desc = $parent->get_meta('_customs_description', true) ?: $desc;
             }
         }
-
-        $hs_code = is_string($hs_code) ? trim($hs_code) : '';
         $desc = is_string($desc) ? trim($desc) : '';
-        $origin = is_string($origin) ? strtoupper(trim($origin)) : '';
 
         // Need at least origin; HS code is preferred but desc can be fallback
         if ($origin === '' || ($hs_code === '' && $desc === '')) { return null; }

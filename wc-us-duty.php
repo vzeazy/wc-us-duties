@@ -21,6 +21,7 @@ define('WRD_US_DUTY_URL', plugin_dir_url(__FILE__));
 // Autoload simple includes
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-db.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-fx.php';
+require_once WRD_US_DUTY_DIR . 'includes/class-wrd-category-settings.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-duty-engine.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-admin.php';
 require_once WRD_US_DUTY_DIR . 'includes/class-wrd-settings.php';
@@ -56,11 +57,12 @@ add_action('init', function(){
 // Nice admin shortcuts on the Plugins list row
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
     if (!current_user_can('manage_woocommerce')) { return $links; }
+    $manager = sprintf('<a href="%s"><strong>%s</strong></a>', esc_url(admin_url('admin.php?page=wrd-duty-manager')), esc_html__('Duty Manager', 'woocommerce-us-duties'));
     $settings = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=settings')), esc_html__('Settings', 'woocommerce-us-duties'));
     $profiles = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=profiles')), esc_html__('Customs & Duties', 'woocommerce-us-duties'));
     $import = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import')), esc_html__('Import/Export', 'woocommerce-us-duties'));
     $tools = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=tools')), esc_html__('Tools', 'woocommerce-us-duties'));
-    array_unshift($links, $settings, $profiles, $import, $tools);
+    array_unshift($links, $manager, $settings, $profiles, $import, $tools);
     return $links;
 });
 
