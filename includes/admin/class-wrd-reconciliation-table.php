@@ -60,80 +60,98 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     }
 
     public function prepare_items() {
-        global $wpdb;
         $per_page = 20;
         $current_page = $this->get_pagenum();
         $offset = ($current_page - 1) * $per_page;
 
-        $post_types = [ 'product', 'product_variation' ];
-        $inTypes = implode("','", array_map('esc_sql', $post_types));
+        $ids = get_posts([
+            'post_type' => ['product', 'product_variation'],
+            'post_status' => ['publish', 'draft', 'pending', 'private'],
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'orderby' => 'ID',
+            'order' => 'DESC',
+        ]);
 
-        // Build where for missing/no-profile (now based on HS code)
-        $where = "p.post_type IN ('{$inTypes}') AND p.post_status NOT IN ('trash','auto-draft')";
-        $joins = "LEFT JOIN {$wpdb->postmeta} h ON (h.post_id = p.ID AND h.meta_key = '_wrd_hs_code')
-                  LEFT JOIN {$wpdb->postmeta} c ON (c.post_id = p.ID AND c.meta_key = '_wrd_origin_cc')";
-
-        if ($this->status === 'missing_desc') {
-            // Renamed to missing_hs
-            $where .= " AND (h.meta_value IS NULL OR h.meta_value = '')";
-        } elseif ($this->status === 'missing_origin') {
-            $where .= " AND (c.meta_value IS NULL OR c.meta_value = '')";
-        } elseif ($this->status === 'no_profile') {
-            // No profile: both present but not found in profiles table
-            $profiles = WRD_DB::table_profiles();
-            $joins .= " LEFT JOIN {$profiles} prof ON (prof.hs_code = h.meta_value AND prof.country_code = c.meta_value
-                        AND (prof.effective_from IS NULL OR prof.effective_from <= DATE(NOW()))
-                        AND (prof.effective_to IS NULL OR prof.effective_to >= DATE(NOW())))";
-            $where .= " AND (COALESCE(h.meta_value,'') <> '' AND COALESCE(c.meta_value,'') <> '' AND prof.id IS NULL)";
-        } else { // any_missing
-            $where .= " AND (COALESCE(h.meta_value,'') = '' OR COALESCE(c.meta_value,'') = '')";
-        }
-
-        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} p {$joins} WHERE {$where}");
-
-        $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT p.ID, p.post_title, p.post_type,
-                    COALESCE(vhs.meta_value, phs.meta_value) AS hs_code,
-                    COALESCE(vorg.meta_value, porg.meta_value) AS origin,
-                    sku.meta_value AS sku
-             FROM {$wpdb->posts} p
-             {$joins}
-             LEFT JOIN {$wpdb->postmeta} phs ON (phs.post_id = CASE WHEN p.post_type='product' THEN p.ID ELSE p.post_parent END AND phs.meta_key='_hs_code')
-             LEFT JOIN {$wpdb->postmeta} porg ON (porg.post_id = CASE WHEN p.post_type='product' THEN p.ID ELSE p.post_parent END AND porg.meta_key='_country_of_origin')
-             LEFT JOIN {$wpdb->postmeta} vhs ON (vhs.post_id = p.ID AND vhs.meta_key='_hs_code')
-             LEFT JOIN {$wpdb->postmeta} vorg ON (vorg.post_id = p.ID AND vorg.meta_key='_country_of_origin')
-             LEFT JOIN {$wpdb->postmeta} sku ON (sku.post_id=p.ID AND sku.meta_key='_sku')
-             WHERE {$where}
-             ORDER BY p.ID DESC
-             LIMIT %d OFFSET %d",
-            $per_page, $offset
-        ), ARRAY_A);
-
+        $profile_cache = [];
         $items = [];
-        foreach ($rows as $r) {
-            $missing_hs = (trim((string)$r['hs_code']) === '');
-            $missing_cc = (strtoupper(trim((string)$r['origin'])) === '');
+
+        foreach ($ids as $pid) {
+            $product = wc_get_product((int) $pid);
+            if (!$product) { continue; }
+
+            $effective = WRD_Category_Settings::get_effective_hs_code($product);
+            $hs_code = trim((string) ($effective['hs_code'] ?? ''));
+            $origin = strtoupper(trim((string) ($effective['origin'] ?? '')));
+            $missing_hs = ($hs_code === '');
+            $missing_origin = ($origin === '');
+            $has_profile = false;
+
+            if (!$missing_hs && !$missing_origin) {
+                $cache_key = $hs_code . '|' . $origin;
+                if (!array_key_exists($cache_key, $profile_cache)) {
+                    $profile_cache[$cache_key] = (bool) WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+                }
+                $has_profile = $profile_cache[$cache_key];
+            }
+
+            $status_key = 'ok';
             $status_parts = [];
-            if ($missing_hs) { $status_parts[] = '<span style="color:#a00;">' . esc_html__('Missing HS code', 'woocommerce-us-duties') . '</span>'; }
-            if ($missing_cc) { $status_parts[] = '<span style="color:#a00;">' . esc_html__('Missing origin', 'woocommerce-us-duties') . '</span>'; }
-            if (!$missing_hs && !$missing_cc) { $status_parts[] = '<span style="color:#d98300;">' . esc_html__('No profile', 'woocommerce-us-duties') . '</span>'; }
+            if ($missing_hs) {
+                $status_key = 'missing_hs';
+                $status_parts[] = '<span style="color:#a00;">' . esc_html__('Missing HS code', 'woocommerce-us-duties') . '</span>';
+            }
+            if ($missing_origin) {
+                $status_key = 'missing_origin';
+                $status_parts[] = '<span style="color:#a00;">' . esc_html__('Missing origin', 'woocommerce-us-duties') . '</span>';
+            }
+            if (!$missing_hs && !$missing_origin && !$has_profile) {
+                $status_key = 'no_profile';
+                $status_parts[] = '<span style="color:#d98300;">' . esc_html__('No matching profile', 'woocommerce-us-duties') . '</span>';
+            }
+            if (!$this->matches_status_filter($status_key)) {
+                continue;
+            }
+
+            if (!empty($effective['source']) && strpos((string) $effective['source'], 'category:') === 0) {
+                $status_parts[] = '<span style="color:#2271b1;">' . esc_html(sprintf(__('Inherited from %s', 'woocommerce-us-duties'), substr((string) $effective['source'], 9))) . '</span>';
+            }
+
             $items[] = [
-                'id' => (int)$r['ID'],
-                'title' => (string)$r['post_title'],
-                'type' => $r['post_type'] === 'product_variation' ? 'Variation' : 'Product',
-                'sku' => (string)$r['sku'],
-                'hs_code' => trim((string)$r['hs_code']),
-                'origin' => strtoupper(trim((string)$r['origin'])),
+                'id' => (int) $pid,
+                'title' => (string) $product->get_name(),
+                'type' => $product->is_type('variation') ? 'Variation' : 'Product',
+                'sku' => (string) $product->get_sku(),
+                'hs_code' => $hs_code,
+                'origin' => $origin,
                 'status_html' => implode(' · ', $status_parts),
             ];
         }
 
-        $this->items = $items;
+        $total = count($items);
+        $this->items = array_slice($items, $offset, $per_page);
         $this->_column_headers = [$this->get_columns(), [], [], 'title'];
         $this->set_pagination_args([
             'total_items' => $total,
             'per_page' => $per_page,
-            'total_pages' => ceil($total / $per_page),
+            'total_pages' => (int) ceil($total / $per_page),
         ]);
+    }
+
+    private function matches_status_filter(string $status_key): bool {
+        if ($this->status === 'any_missing') {
+            return in_array($status_key, ['missing_hs', 'missing_origin', 'no_profile'], true);
+        }
+        if ($this->status === 'missing_desc') {
+            // Legacy key retained for URL compatibility.
+            return $status_key === 'missing_hs';
+        }
+        if ($this->status === 'missing_origin') {
+            return $status_key === 'missing_origin';
+        }
+        if ($this->status === 'no_profile') {
+            return $status_key === 'no_profile';
+        }
+        return true;
     }
 }

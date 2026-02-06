@@ -114,15 +114,10 @@ class WRD_Admin {
     }
 
     public function save_product_fields($product): void {
-        $hs_code = isset($_POST['_hs_code']) ? trim(sanitize_text_field(wp_unslash($_POST['_hs_code']))) : '';
-        $origin = isset($_POST['_country_of_origin']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['_country_of_origin']))) : '';
-
-        $product->update_meta_data('_hs_code', $hs_code);
-        $product->update_meta_data('_country_of_origin', $origin);
-        $product->save();
-
-        // Update normalized meta on product and inheriting variations
-        $this->update_normalized_meta_for_product((int)$product->get_id());
+        self::upsert_product_classification((int) $product->get_id(), [
+            'hs_code' => isset($_POST['_hs_code']) ? wp_unslash($_POST['_hs_code']) : '',
+            'origin' => isset($_POST['_country_of_origin']) ? wp_unslash($_POST['_country_of_origin']) : '',
+        ]);
     }
 
     public function variation_fields($loop, $variation_data, $variation): void {
@@ -155,14 +150,16 @@ class WRD_Admin {
     }
 
     public function save_variation_fields($variation_id, $i): void {
+        $changes = [];
         if (isset($_POST['_hs_code'][$i])) {
-            update_post_meta($variation_id, '_hs_code', trim(sanitize_text_field(wp_unslash($_POST['_hs_code'][$i]))));
+            $changes['hs_code'] = wp_unslash($_POST['_hs_code'][$i]);
         }
         if (isset($_POST['_country_of_origin'][$i])) {
-            update_post_meta($variation_id, '_country_of_origin', strtoupper(sanitize_text_field(wp_unslash($_POST['_country_of_origin'][$i]))));
+            $changes['origin'] = wp_unslash($_POST['_country_of_origin'][$i]);
         }
-        // Maintain normalized meta for this variation
-        $this->update_normalized_meta_for_variation((int)$variation_id);
+        if ($changes) {
+            self::upsert_product_classification((int) $variation_id, $changes);
+        }
     }
 
     public function add_estimated_duties_fee(): void {
@@ -870,24 +867,13 @@ class WRD_Admin {
             wp_send_json_error(['message' => 'Product not found'], 404);
         }
 
-        // Update product meta
-        $product->update_meta_data('_hs_code', $hs_code);
-        $product->update_meta_data('_country_of_origin', $country);
+        self::upsert_product_classification($product_id, [
+            'hs_code' => $hs_code,
+            'origin' => $country,
+        ]);
 
-        // Look up and link profile if available
+        // Report whether a profile exists for UI feedback.
         $profile = WRD_DB::get_profile_by_hs_country($hs_code, $country);
-        if ($profile && isset($profile['id'])) {
-            $product->update_meta_data('_wrd_profile_id', (int)$profile['id']);
-        }
-
-        $product->save();
-
-        // Update normalized meta
-        if ($product->is_type('variation')) {
-            $this->update_normalized_meta_for_variation($product_id);
-        } else {
-            $this->update_normalized_meta_for_product($product_id);
-        }
 
         wp_send_json_success([
             'message' => 'Profile assigned successfully',
@@ -895,6 +881,39 @@ class WRD_Admin {
             'country' => $country,
             'has_profile' => !empty($profile)
         ]);
+    }
+
+    /**
+     * Canonical write path for product/variation customs data.
+     * Supported keys in $changes: hs_code, origin, desc.
+     */
+    public static function upsert_product_classification(int $product_id, array $changes): bool {
+        $product = wc_get_product($product_id);
+        if (!$product) { return false; }
+
+        if (array_key_exists('hs_code', $changes)) {
+            $product->update_meta_data('_hs_code', trim(sanitize_text_field((string) $changes['hs_code'])));
+        }
+        if (array_key_exists('origin', $changes)) {
+            $product->update_meta_data('_country_of_origin', strtoupper(trim(sanitize_text_field((string) $changes['origin']))));
+        }
+        if (array_key_exists('desc', $changes)) {
+            $desc = trim((string) wp_kses_post($changes['desc']));
+            if ($desc === '') {
+                $product->delete_meta_data('_customs_description');
+            } else {
+                $product->update_meta_data('_customs_description', $desc);
+            }
+        }
+
+        $product->save();
+
+        if ($product->is_type('variation')) {
+            self::update_normalized_meta_for_variation((int) $product->get_id());
+        } else {
+            self::update_normalized_meta_for_product((int) $product->get_id());
+        }
+        return true;
     }
 
     // --- Quick/Bulk edit fields and handler ---
@@ -942,14 +961,12 @@ class WRD_Admin {
         $desc = isset($_REQUEST['wrd_customs_description']) ? wp_kses_post(wp_unslash($_REQUEST['wrd_customs_description'])) : '';
         $origin = isset($_REQUEST['wrd_country_of_origin']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['wrd_country_of_origin']))) : '';
 
-        $changed = false;
-        if ($hs_code !== '') { $product->update_meta_data('_hs_code', $hs_code); $changed = true; }
-        if ($desc !== '') { $product->update_meta_data('_customs_description', $desc); $changed = true; }
-        if ($origin !== '') { $product->update_meta_data('_country_of_origin', $origin); $changed = true; }
-        if ($changed) {
-            $product->save();
-            // update normalized meta
-            $this->update_normalized_meta_for_product((int)$product->get_id());
+        $changes = [];
+        if ($hs_code !== '') { $changes['hs_code'] = $hs_code; }
+        if ($desc !== '') { $changes['desc'] = $desc; }
+        if ($origin !== '') { $changes['origin'] = $origin; }
+        if ($changes) {
+            self::upsert_product_classification((int) $product->get_id(), $changes);
         }
     }
 
@@ -1063,19 +1080,13 @@ class WRD_Admin {
         if ($pid <= 0 || $hs_code === '' || $cc === '') { wp_send_json_error(['message' => 'invalid_params'], 400); }
         $product = wc_get_product($pid);
         if (!$product) { wp_send_json_error(['message' => 'not_found'], 404); }
-        $product->update_meta_data('_hs_code', $hs_code);
-        $product->update_meta_data('_country_of_origin', $cc);
-        // Optionally store a direct profile link if available
+        self::upsert_product_classification($pid, [
+            'hs_code' => $hs_code,
+            'origin' => $cc,
+        ]);
+
+        // Optionally return matched profile data.
         $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
-        if ($profile && isset($profile['id'])) {
-            $product->update_meta_data('_wrd_profile_id', (int)$profile['id']);
-        }
-        $product->save();
-        if ($product->is_type('variation')) {
-            $this->update_normalized_meta_for_variation($pid);
-        } else {
-            $this->update_normalized_meta_for_product($pid);
-        }
         // Return a small payload with status and maybe matched profile data
         $ratePostal = 0.0; $rateComm = 0.0;
         if ($profile && is_array($profile)) {
@@ -1470,14 +1481,7 @@ class WRD_Admin {
             $hs_code = $profile['hs_code'];
 
             if (!$dry_run) {
-                update_post_meta($product_id, '_hs_code', $hs_code);
-                // Also update normalized meta
-                $post_type = get_post_type($product_id);
-                if ($post_type === 'product_variation') {
-                    $this->update_normalized_meta_for_variation($product_id);
-                } else {
-                    $this->update_normalized_meta_for_product($product_id);
-                }
+                self::upsert_product_classification((int) $product_id, ['hs_code' => $hs_code]);
                 $summary['updated']++;
             } else {
                 $summary['updated']++;
@@ -1991,21 +1995,10 @@ class WRD_Admin {
             if (!$product) { $skipped++; $messages[] = "Row {$rows}: product {$pid} could not be loaded"; continue; }
 
             // Update product meta
-            if ($hs_code !== '') {
-                $product->update_meta_data('_hs_code', $hs_code);
-            }
-            if ($desc !== '') {
-                $product->update_meta_data('_customs_description', wp_kses_post($desc));
-            }
-            $product->update_meta_data('_country_of_origin', $cc);
-            $product->save();
-
-            // Update normalized meta correctly for product vs variation
-            if ($product->is_type('variation')) {
-                $this->update_normalized_meta_for_variation((int) $product->get_id());
-            } else {
-                $this->update_normalized_meta_for_product((int) $product->get_id());
-            }
+            $changes = ['origin' => $cc];
+            if ($hs_code !== '') { $changes['hs_code'] = $hs_code; }
+            if ($desc !== '') { $changes['desc'] = $desc; }
+            self::upsert_product_classification((int) $product->get_id(), $changes);
             $updated++;
         }
         fclose($fh);
@@ -2018,13 +2011,13 @@ class WRD_Admin {
     public function update_normalized_meta_on_save($post_id, $post, $update): void {
         if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) { return; }
         if ($post->post_type === 'product') {
-            $this->update_normalized_meta_for_product((int)$post_id);
+            self::update_normalized_meta_for_product((int)$post_id);
         } elseif ($post->post_type === 'product_variation') {
-            $this->update_normalized_meta_for_variation((int)$post_id);
+            self::update_normalized_meta_for_variation((int)$post_id);
         }
     }
 
-    private function update_normalized_meta_for_product(int $product_id): void {
+    public static function update_normalized_meta_for_product(int $product_id): void {
         // Get HS code and origin
         $hs_code = trim((string)get_post_meta($product_id, '_hs_code', true));
         $origin = strtoupper((string)get_post_meta($product_id, '_country_of_origin', true));
@@ -2037,6 +2030,18 @@ class WRD_Admin {
         update_post_meta($product_id, '_wrd_hs_code', $hs_code);
         update_post_meta($product_id, '_wrd_origin_cc', $origin);
         update_post_meta($product_id, '_wrd_desc_norm', $descNorm); // Keep for legacy support
+
+        // Keep direct profile links in sync with the canonical HS+origin pair.
+        if ($hs_code !== '' && $origin !== '') {
+            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            if ($profile && isset($profile['id'])) {
+                update_post_meta($product_id, '_wrd_profile_id', (int) $profile['id']);
+            } else {
+                delete_post_meta($product_id, '_wrd_profile_id');
+            }
+        } else {
+            delete_post_meta($product_id, '_wrd_profile_id');
+        }
 
         // If product has HS + country but no description, pull from profile
         if ($hs_code && $origin && !$desc) {
@@ -2058,12 +2063,12 @@ class WRD_Admin {
             $vorigin = strtoupper((string)get_post_meta($vid, '_country_of_origin', true));
             $vdesc = get_post_meta($vid, '_customs_description', true);
             if ($vhs === '' || $vorigin === '' || $vdesc === '') {
-                $this->update_normalized_meta_for_variation((int)$vid);
+                self::update_normalized_meta_for_variation((int)$vid);
             }
         }
     }
 
-    private function update_normalized_meta_for_variation(int $variation_id): void {
+    public static function update_normalized_meta_for_variation(int $variation_id): void {
         $parent_id = (int) get_post_field('post_parent', $variation_id);
 
         // Get values from variation, inherit from parent if not set
@@ -2089,6 +2094,18 @@ class WRD_Admin {
         update_post_meta($variation_id, '_wrd_hs_code', $hs_code);
         update_post_meta($variation_id, '_wrd_origin_cc', $origin);
         update_post_meta($variation_id, '_wrd_desc_norm', $descNorm); // Keep for legacy support
+
+        // Sync direct profile link from effective variation values (includes parent fallback).
+        if ($hs_code !== '' && $origin !== '') {
+            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            if ($profile && isset($profile['id'])) {
+                update_post_meta($variation_id, '_wrd_profile_id', (int) $profile['id']);
+            } else {
+                delete_post_meta($variation_id, '_wrd_profile_id');
+            }
+        } else {
+            delete_post_meta($variation_id, '_wrd_profile_id');
+        }
 
         // If variation has HS + country but no description, pull from profile
         if ($hs_code && $origin && !$desc) {
@@ -2119,9 +2136,9 @@ class WRD_Admin {
             foreach ($q->posts as $pid) {
                 $post_type = get_post_type($pid);
                 if ($post_type === 'product') {
-                    $this->update_normalized_meta_for_product((int)$pid);
+                    self::update_normalized_meta_for_product((int)$pid);
                 } else {
-                    $this->update_normalized_meta_for_variation((int)$pid);
+                    self::update_normalized_meta_for_variation((int)$pid);
                 }
                 $processed++;
                 if ($processed >= $max) { break 2; }
@@ -2170,7 +2187,7 @@ class WRD_Admin {
         echo '<select name="status" id="wrd-status">';
         $opts = [
             'any_missing' => __('Any missing', 'woocommerce-us-duties'),
-            'missing_desc' => __('Missing description', 'woocommerce-us-duties'),
+            'missing_desc' => __('Missing HS code', 'woocommerce-us-duties'),
             'missing_origin' => __('Missing origin', 'woocommerce-us-duties'),
             'no_profile' => __('No matching profile', 'woocommerce-us-duties'),
         ];

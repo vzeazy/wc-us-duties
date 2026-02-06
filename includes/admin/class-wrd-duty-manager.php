@@ -118,9 +118,14 @@ class WRD_Duty_Manager {
                         // Determine status
                         $status = 'missing';
                         $status_label = __('Missing', 'woocommerce-us-duties');
+                        $has_profile = false;
                         
                         if ($effective['hs_code'] && $effective['origin']) {
-                            if ($effective['source'] === 'product') {
+                            $has_profile = (bool) WRD_DB::get_profile_by_hs_country($effective['hs_code'], $effective['origin']);
+                            if (!$has_profile) {
+                                $status = 'missing';
+                                $status_label = __('No profile match', 'woocommerce-us-duties');
+                            } elseif ($effective['source'] === 'product') {
                                 $status = 'complete';
                                 $status_label = __('Complete', 'woocommerce-us-duties');
                             } else {
@@ -213,10 +218,11 @@ class WRD_Duty_Manager {
             
             $hs_code = trim(sanitize_text_field($hs_code));
             $origin = isset($origins[$product_id]) ? strtoupper(trim(sanitize_text_field($origins[$product_id]))) : '';
-            
-            $product->update_meta_data('_hs_code', $hs_code);
-            $product->update_meta_data('_country_of_origin', $origin);
-            $product->save();
+
+            WRD_Admin::upsert_product_classification($product_id, [
+                'hs_code' => $hs_code,
+                'origin' => $origin,
+            ]);
         }
         
         echo '<div class="notice notice-success"><p>' . esc_html__('Products updated successfully.', 'woocommerce-us-duties') . '</p></div>';
