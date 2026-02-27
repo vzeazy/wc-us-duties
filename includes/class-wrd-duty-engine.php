@@ -36,6 +36,173 @@ class WRD_Duty_Engine {
         return $isPercent ? $sum : ($sum * 100.0);
     }
 
+    private static function normalize_rate_to_percent($rate): float {
+        if (!is_numeric($rate)) { return 0.0; }
+        $value = (float)$rate;
+        return ($value >= 1.0) ? $value : ($value * 100.0);
+    }
+
+    private static function resolve_product_metal_value_usd(\WC_Product $product, float $qty = 1.0): ?float {
+        $qty = max(1.0, $qty);
+        $mode = 'inherit';
+        if ($product->is_type('variation')) {
+            $modeRaw = (string)$product->get_meta('_wrd_232_basis_mode', true);
+            $mode = in_array($modeRaw, ['inherit', 'explicit', 'none'], true) ? $modeRaw : 'inherit';
+            if ($mode === 'none') {
+                return 0.0;
+            }
+            if ($mode === 'explicit') {
+                $val = $product->get_meta('_wrd_232_metal_value_usd', true);
+                return is_numeric($val) ? max(0.0, (float)$val) * $qty : null;
+            }
+            $parent = wc_get_product($product->get_parent_id());
+            if ($parent instanceof \WC_Product) {
+                $val = $parent->get_meta('_wrd_232_metal_value_usd', true);
+                return is_numeric($val) ? max(0.0, (float)$val) * $qty : null;
+            }
+            return null;
+        }
+
+        $val = $product->get_meta('_wrd_232_metal_value_usd', true);
+        return is_numeric($val) ? max(0.0, (float)$val) * $qty : null;
+    }
+
+    private static function normalize_channel_components(array $us_duty_json, string $channel): array {
+        $channel = strtolower($channel);
+        if (empty($us_duty_json[$channel]) || !is_array($us_duty_json[$channel])) {
+            return [];
+        }
+        $node = $us_duty_json[$channel];
+        $components = [];
+
+        if (!empty($node['components']) && is_array($node['components'])) {
+            foreach ($node['components'] as $idx => $component) {
+                if (!is_array($component)) { continue; }
+                $ratePct = self::normalize_rate_to_percent($component['rate'] ?? null);
+                if ($ratePct <= 0) { continue; }
+                $code = sanitize_key((string)($component['code'] ?? 'component_' . $idx));
+                if ($code === '') { $code = 'component_' . $idx; }
+                $basis = sanitize_key((string)($component['basis'] ?? 'line_value_usd'));
+                if (!in_array($basis, ['line_value_usd', 'product_metal_value_usd'], true)) {
+                    $basis = 'line_value_usd';
+                }
+                $components[] = [
+                    'code' => $code,
+                    'label' => (string)($component['label'] ?? $code),
+                    'rate_pct' => $ratePct,
+                    'basis' => $basis,
+                    'order' => isset($component['order']) ? (int)$component['order'] : (100 + $idx),
+                    'enabled' => !isset($component['enabled']) || (bool)$component['enabled'],
+                ];
+            }
+        }
+
+        if (isset($node['rates']) && (is_array($node['rates']) || is_object($node['rates']))) {
+            $rates = is_object($node['rates']) ? (array)$node['rates'] : $node['rates'];
+            foreach ($rates as $rateKey => $rateValue) {
+                if (!is_numeric($rateValue)) { continue; }
+                $code = sanitize_key((string)$rateKey);
+                if ($code === '') { $code = 'base'; }
+                $exists = false;
+                foreach ($components as $component) {
+                    if ($component['code'] === $code) { $exists = true; break; }
+                }
+                if ($exists) { continue; }
+                $components[] = [
+                    'code' => $code,
+                    'label' => (string)$rateKey,
+                    'rate_pct' => self::normalize_rate_to_percent($rateValue),
+                    'basis' => 'line_value_usd',
+                    'order' => 50,
+                    'enabled' => true,
+                ];
+            }
+        }
+
+        usort($components, static function ($a, $b) {
+            $ao = (int)($a['order'] ?? 999);
+            $bo = (int)($b['order'] ?? 999);
+            if ($ao === $bo) { return strcmp((string)$a['code'], (string)$b['code']); }
+            return $ao <=> $bo;
+        });
+        return $components;
+    }
+
+    private static function compute_line_duty_breakdown(\WC_Product $product, array $profile, string $channel, float $lineValueUsd, float $qty, bool $isCusma): array {
+        $components = self::normalize_channel_components($profile['us_duty_json'] ?? [], $channel);
+        if (!$components) {
+            $ratePct = self::compute_rate_percent($profile['us_duty_json'] ?? [], $channel);
+            if ($isCusma) { $ratePct = 0.0; }
+            return [
+                'total_rate_pct' => $ratePct,
+                'total_duty_usd' => ($ratePct / 100.0) * $lineValueUsd,
+                'components' => [],
+                'missing_232_basis' => false,
+            ];
+        }
+
+        $outComponents = [];
+        $totalDuty = 0.0;
+        $missing232Basis = false;
+        foreach ($components as $component) {
+            if (empty($component['enabled'])) { continue; }
+            $code = (string)$component['code'];
+            $basis = (string)$component['basis'];
+            $ratePct = (float)$component['rate_pct'];
+
+            if ($isCusma && $code !== 'section_232') {
+                $outComponents[] = [
+                    'code' => $code,
+                    'label' => (string)$component['label'],
+                    'rate_pct' => $ratePct,
+                    'basis' => $basis,
+                    'basis_value_usd' => 0.0,
+                    'duty_usd' => 0.0,
+                    'applied' => false,
+                    'reason' => 'cusma_exempt',
+                ];
+                continue;
+            }
+
+            $basisValue = 0.0;
+            $applied = true;
+            $reason = 'applied';
+            if ($basis === 'product_metal_value_usd') {
+                $metalValue = self::resolve_product_metal_value_usd($product, $qty);
+                if ($metalValue === null) {
+                    $applied = false;
+                    $reason = 'missing_product_metal_value_usd';
+                    $missing232Basis = $missing232Basis || ($code === 'section_232');
+                } else {
+                    $basisValue = max(0.0, (float)$metalValue);
+                }
+            } else {
+                $basisValue = max(0.0, $lineValueUsd);
+            }
+
+            $dutyUsd = $applied ? (($ratePct / 100.0) * $basisValue) : 0.0;
+            $totalDuty += $dutyUsd;
+            $outComponents[] = [
+                'code' => $code,
+                'label' => (string)$component['label'],
+                'rate_pct' => $ratePct,
+                'basis' => $basis,
+                'basis_value_usd' => $basisValue,
+                'duty_usd' => $dutyUsd,
+                'applied' => $applied,
+                'reason' => $reason,
+            ];
+        }
+
+        $totalRatePct = $lineValueUsd > 0 ? (($totalDuty / $lineValueUsd) * 100.0) : 0.0;
+        return [
+            'total_rate_pct' => $totalRatePct,
+            'total_duty_usd' => $totalDuty,
+            'components' => $outComponents,
+            'missing_232_basis' => $missing232Basis,
+        ];
+    }
+
     public static function decide_channel(string $countryCode): string {
         $cc = strtoupper($countryCode);
         // Basic preferences per docs
@@ -173,9 +340,11 @@ class WRD_Duty_Engine {
                 $isCusma = in_array('CUSMA', $profile['fta_flags'], true) && in_array(strtoupper((string)$origin), ['CA','US','MX'], true);
             }
 
-            $ratePct = $profile ? self::compute_rate_percent($profile['us_duty_json'], $channel) : 0.0;
-            if ($isCusma) { $ratePct = 0.0; }
-            $dutyUsd = ($ratePct / 100.0) * $valueUsd;
+            $breakdown = $profile
+                ? self::compute_line_duty_breakdown($product, $profile, $channel, $valueUsd, $qty, $isCusma)
+                : ['total_rate_pct' => 0.0, 'total_duty_usd' => 0.0, 'components' => [], 'missing_232_basis' => false];
+            $ratePct = (float)$breakdown['total_rate_pct'];
+            $dutyUsd = (float)$breakdown['total_duty_usd'];
 
             $composition['total_value_usd'] += $valueUsd;
             if ($isCusma) { $composition['cusma_value_usd'] += $valueUsd; } else { $composition['non_cusma_value_usd'] += $valueUsd; }
@@ -195,6 +364,8 @@ class WRD_Duty_Engine {
                 'rate_pct' => $ratePct,
                 'value_usd' => $valueUsd,
                 'duty_usd' => $dutyUsd,
+                'components' => $breakdown['components'],
+                'missing_232_basis' => !empty($breakdown['missing_232_basis']),
             ];
 
             $lines[] = [
@@ -207,6 +378,8 @@ class WRD_Duty_Engine {
                 'value_usd' => $valueUsd,
                 'duty_usd' => $dutyUsd,
                 'cusma' => $isCusma,
+                'components' => $breakdown['components'],
+                'missing_232_basis' => !empty($breakdown['missing_232_basis']),
                 'debug' => $debug,
             ];
             $totalUsd += $dutyUsd;
@@ -301,8 +474,6 @@ class WRD_Duty_Engine {
         if ($profile && !$desc && isset($profile['description_raw'])) {
             $desc = $profile['description_raw'];
         }
-        $ratePct = $profile ? self::compute_rate_percent($profile['us_duty_json'], $channel) : 0.0;
-
         // CUSMA
         $isCusma = false;
         $cusmaEnabled = !empty($settings['cusma_auto']);
@@ -312,11 +483,13 @@ class WRD_Duty_Engine {
         } elseif ($profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
             $isCusma = in_array('CUSMA', $profile['fta_flags'], true) && in_array($origin, ['CA','US','MX'], true);
         }
-        if ($isCusma) { $ratePct = 0.0; }
-
         $valueStore = (float)$product->get_price() * max(1, $qty);
         $valueUsd = self::to_usd($valueStore, $currency);
-        $dutyUsd = ($ratePct / 100.0) * $valueUsd;
+        $breakdown = $profile
+            ? self::compute_line_duty_breakdown($product, $profile, $channel, $valueUsd, (float)max(1, $qty), $isCusma)
+            : ['total_rate_pct' => 0.0, 'total_duty_usd' => 0.0, 'components' => [], 'missing_232_basis' => false];
+        $ratePct = (float)$breakdown['total_rate_pct'];
+        $dutyUsd = (float)$breakdown['total_duty_usd'];
 
         return [
             'rate_pct' => $ratePct,
@@ -326,6 +499,8 @@ class WRD_Duty_Engine {
             'cusma' => $isCusma,
             'origin' => $origin,
             'dest' => $dest,
+            'components' => $breakdown['components'],
+            'missing_232_basis' => !empty($breakdown['missing_232_basis']),
         ];
     }
 }

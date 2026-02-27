@@ -48,19 +48,6 @@ class WRD_Profiles_Table extends WP_List_Table {
                 return esc_html(strtoupper((string)($item['country_code'] ?? '')));
             case 'hs_code':
                 return esc_html((string)($item['hs_code'] ?? ''));
-            case 'active':
-                $now = current_time('mysql');
-                $today = substr($now, 0, 10);
-                $from = isset($item['effective_from']) ? (string) $item['effective_from'] : '';
-                $to = isset($item['effective_to']) ? (string) $item['effective_to'] : '';
-                $is_active = true;
-                if ($from !== '' && $today < $from) {
-                    $is_active = false;
-                }
-                if ($to !== '' && $today > $to) {
-                    $is_active = false;
-                }
-                return $is_active ? esc_html__('Active', 'woocommerce-us-duties') : esc_html__('Inactive', 'woocommerce-us-duties');
             case 'postal_rate':
             case 'commercial_rate':
                 // Expect computed aliases from query; format as percentage with up to 4 decimals
@@ -73,12 +60,6 @@ class WRD_Profiles_Table extends WP_List_Table {
                     return '0';
                 }
                 return esc_html(rtrim(rtrim(number_format($val, 4, '.', ''), '0'), '.') );
-            case 'notes':
-                $notes = (string)($item['notes'] ?? '');
-                if ($notes === '') { return ''; }
-                $short = mb_substr($notes, 0, 60);
-                if (mb_strlen($notes) > 60) { $short .= '…'; }
-                return esc_html($short);
         }
         // Fallback to raw for any unhandled columns
         return isset($item[$column_name]) ? esc_html((string)$item[$column_name]) : '';
@@ -124,6 +105,88 @@ class WRD_Profiles_Table extends WP_List_Table {
             'cc' => $cc,
         ], admin_url('admin.php'));
         return sprintf('<a href="%s">%d</a>', esc_url($url), $count);
+    }
+
+    protected function column_active($item) {
+        $status = $this->get_active_status_meta($item);
+        $pill = sprintf(
+            '<span class="wrd-status-pill wrd-status-pill--%1$s">%2$s</span>',
+            esc_attr($status['state']),
+            esc_html($status['label'])
+        );
+        if ($status['meta'] === '') {
+            return $pill;
+        }
+        return $pill . '<span class="wrd-cell-meta">' . esc_html($status['meta']) . '</span>';
+    }
+
+    protected function column_notes($item) {
+        $notes = trim((string)($item['notes'] ?? ''));
+        if ($notes === '') {
+            return '<span class="wrd-cell-empty">—</span>';
+        }
+
+        $singleLine = preg_replace('/\s+/', ' ', $notes);
+        $singleLine = is_string($singleLine) ? trim($singleLine) : $notes;
+        $snippet = wp_html_excerpt($singleLine, 100, '…');
+
+        return sprintf(
+            '<span class="wrd-notes-snippet" title="%1$s">%2$s</span>',
+            esc_attr($notes),
+            esc_html($snippet)
+        );
+    }
+
+    private function get_active_status_meta(array $item): array {
+        $today = current_time('Y-m-d');
+        $from = isset($item['effective_from']) ? trim((string)$item['effective_from']) : '';
+        $to = isset($item['effective_to']) ? trim((string)$item['effective_to']) : '';
+
+        if ($from !== '' && $today < $from) {
+            return [
+                'state' => 'scheduled',
+                'label' => __('Scheduled', 'woocommerce-us-duties'),
+                'meta' => sprintf(__('Starts %s', 'woocommerce-us-duties'), $from),
+            ];
+        }
+
+        if ($to !== '' && $today > $to) {
+            return [
+                'state' => 'expired',
+                'label' => __('Expired', 'woocommerce-us-duties'),
+                'meta' => sprintf(__('Ended %s', 'woocommerce-us-duties'), $to),
+            ];
+        }
+
+        if ($from !== '' && $to !== '') {
+            return [
+                'state' => 'active',
+                'label' => __('Active', 'woocommerce-us-duties'),
+                'meta' => sprintf(__('Active %1$s to %2$s', 'woocommerce-us-duties'), $from, $to),
+            ];
+        }
+
+        if ($from !== '') {
+            return [
+                'state' => 'active',
+                'label' => __('Active', 'woocommerce-us-duties'),
+                'meta' => sprintf(__('Since %s', 'woocommerce-us-duties'), $from),
+            ];
+        }
+
+        if ($to !== '') {
+            return [
+                'state' => 'active',
+                'label' => __('Active', 'woocommerce-us-duties'),
+                'meta' => sprintf(__('Until %s', 'woocommerce-us-duties'), $to),
+            ];
+        }
+
+        return [
+            'state' => 'active',
+            'label' => __('Always', 'woocommerce-us-duties'),
+            'meta' => '',
+        ];
     }
 
     public function get_bulk_actions() {

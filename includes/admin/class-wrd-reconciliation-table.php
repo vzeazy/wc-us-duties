@@ -71,6 +71,17 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         return sprintf('<strong><a href="%s">%s</a></strong>', esc_url($editUrl), esc_html($item['title']));
     }
 
+    private function render_status_badge(string $label, string $tone = 'neutral', string $help = ''): string {
+        $allowed_tones = ['critical', 'warning', 'ready', 'info', 'neutral'];
+        if (!in_array($tone, $allowed_tones, true)) {
+            $tone = 'neutral';
+        }
+        $title_attr = $help !== '' ? ' title="' . esc_attr($help) . '"' : '';
+        return '<span class="wrd-status-badge wrd-status-badge-' . esc_attr($tone) . '"' . $title_attr . '>'
+            . esc_html($label)
+            . '</span>';
+    }
+
     protected function column_hs_code($item) {
         $pid = (int)$item['id'];
         $hs_id = 'wrd-hs-' . $pid;
@@ -177,39 +188,66 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $source_label = $source_labels[$source] ?? ucfirst($source);
 
         $has_profile = false;
+        $matched_profile = null;
         if (!$missing_hs && !$missing_origin) {
             $cache_key = $hs_code . '|' . $origin;
             if (!array_key_exists($cache_key, $profile_cache)) {
-                $profile_cache[$cache_key] = (bool) WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+                $profile_cache[$cache_key] = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
             }
-            $has_profile = $profile_cache[$cache_key];
+            $matched_profile = $profile_cache[$cache_key];
+            $has_profile = is_array($matched_profile);
         }
 
-        $warnings = $this->collect_warnings($product, $hs_code, $origin, $has_profile);
+        $warnings = $this->collect_warnings($product, $hs_code, $origin, $has_profile, $matched_profile);
         $status_key = 'ready';
         $status_parts = [];
         if ($missing_hs || $missing_origin) {
             $status_key = 'needs_data';
             if ($missing_hs) {
-                $status_parts[] = '<span style="color:#a00;">' . esc_html__('Enter HS code in the HS Code column', 'woocommerce-us-duties') . '</span>';
+                $status_parts[] = $this->render_status_badge(
+                    __('HS Missing', 'woocommerce-us-duties'),
+                    'critical',
+                    __('No HS code is set. Enter an HS code in the HS Code column and click Apply.', 'woocommerce-us-duties')
+                );
             }
             if ($missing_origin) {
-                $status_parts[] = '<span style="color:#a00;">' . esc_html__('Enter origin in the Origin column', 'woocommerce-us-duties') . '</span>';
+                $status_parts[] = $this->render_status_badge(
+                    __('Origin Missing', 'woocommerce-us-duties'),
+                    'critical',
+                    __('No origin country is set. Enter a 2-letter country code in Origin and click Apply.', 'woocommerce-us-duties')
+                );
             }
         } elseif (!$has_profile) {
             $status_key = 'no_match';
-            $status_parts[] = '<span style="color:#d98300;">' . esc_html__('No matching profile', 'woocommerce-us-duties') . '</span>';
+            $status_parts[] = $this->render_status_badge(
+                __('No Profile', 'woocommerce-us-duties'),
+                'warning',
+                __('HS code and origin are set, but no matching profile exists for this pair.', 'woocommerce-us-duties')
+            );
         } elseif (!empty($warnings)) {
             $status_key = 'warnings';
             foreach ($warnings as $warning) {
-                $status_parts[] = '<span style="color:#996800;">' . esc_html($warning) . '</span>';
+                $status_parts[] = $this->render_status_badge(
+                    $warning,
+                    'warning',
+                    $warning
+                );
             }
         } else {
-            $status_parts[] = '<span style="color:#008a20;">' . esc_html__('Ready', 'woocommerce-us-duties') . '</span>';
+            $status_parts[] = $this->render_status_badge(
+                __('Ready', 'woocommerce-us-duties'),
+                'ready',
+                __('Classification data is complete and a matching profile was found.', 'woocommerce-us-duties')
+            );
         }
 
         if (!empty($effective['source']) && strpos((string) $effective['source'], 'category:') === 0) {
-            $status_parts[] = '<span style="color:#2271b1;">' . esc_html(sprintf(__('Inherited from %s', 'woocommerce-us-duties'), substr((string) $effective['source'], 9))) . '</span>';
+            $category_name = substr((string) $effective['source'], 9);
+            $status_parts[] = $this->render_status_badge(
+                __('Inherited', 'woocommerce-us-duties'),
+                'info',
+                sprintf(__('Values are inherited from category: %s', 'woocommerce-us-duties'), $category_name)
+            );
         }
 
         return [
@@ -224,11 +262,11 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'hs_code' => $hs_code,
             'origin' => $origin,
             'status_key' => $status_key,
-            'status_html' => implode(' · ', $status_parts),
+            'status_html' => '<div class="wrd-status-badges">' . implode('', $status_parts) . '</div>',
         ];
     }
 
-    private function collect_warnings(WC_Product $product, string $hs_code, string $origin, bool $has_profile): array {
+    private function collect_warnings(WC_Product $product, string $hs_code, string $origin, bool $has_profile, ?array $matched_profile = null): array {
         $warnings = [];
 
         if ($origin !== '' && !preg_match('/^[A-Z]{2}$/', $origin)) {
@@ -254,6 +292,49 @@ class WRD_Reconciliation_Table extends WP_List_Table {
 
         if ($has_profile && $origin === 'US') {
             $warnings[] = __('Origin set to US; verify duty expectations', 'woocommerce-us-duties');
+        }
+
+        if ($has_profile && is_array($matched_profile)) {
+            $udj = isset($matched_profile['us_duty_json']) ? $matched_profile['us_duty_json'] : null;
+            if (is_string($udj)) { $udj = json_decode($udj, true); }
+            $requires232 = false;
+            if (is_array($udj)) {
+                foreach (['postal', 'commercial'] as $channel) {
+                    if (!empty($udj[$channel]['components']) && is_array($udj[$channel]['components'])) {
+                        foreach ($udj[$channel]['components'] as $component) {
+                            if (!is_array($component)) { continue; }
+                            $code = sanitize_key((string)($component['code'] ?? ''));
+                            if (strpos($code, '232') !== false) { $requires232 = true; break 2; }
+                        }
+                    }
+                }
+            }
+            if ($requires232) {
+                $metal = null;
+                if ($product->is_type('variation')) {
+                    $mode = (string)$product->get_meta('_wrd_232_basis_mode', true);
+                    if ($mode !== 'none') {
+                        if ($mode === 'explicit') {
+                            $raw = $product->get_meta('_wrd_232_metal_value_usd', true);
+                            $metal = is_numeric($raw) ? (float)$raw : null;
+                        } else {
+                            $parent = wc_get_product($product->get_parent_id());
+                            if ($parent) {
+                                $raw = $parent->get_meta('_wrd_232_metal_value_usd', true);
+                                $metal = is_numeric($raw) ? (float)$raw : null;
+                            }
+                        }
+                    } else {
+                        $metal = 0.0;
+                    }
+                } else {
+                    $raw = $product->get_meta('_wrd_232_metal_value_usd', true);
+                    $metal = is_numeric($raw) ? (float)$raw : null;
+                }
+                if ($metal === null) {
+                    $warnings[] = __('Section 232 metal value missing', 'woocommerce-us-duties');
+                }
+            }
         }
 
         return array_values(array_unique($warnings));

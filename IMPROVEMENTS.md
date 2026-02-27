@@ -1,5 +1,31 @@
 # Duty Rate System Improvements - Implementation Summary
 
+## 2026-02-27 - Description Curation Tool (LLM-Assisted)
+
+- Added a new **Tools > Description Curation** workflow for placeholder/HS-only profile descriptions.
+- Added **Generate Curation Package** export that downloads structured JSON including:
+  - profile identifiers and customs keys (`profile_id`, `hs_code`, `country_code`),
+  - current description and profile metadata,
+  - linked product context (title/SKU/customs descriptions).
+- Added a built-in prompt template in the export payload for use with external LLM chats.
+- Added **Import Curation Response** with strict validation and safeguards:
+  - accepts top-level arrays or objects with `updates[]`,
+  - supports preview-only mode (default) and explicit apply mode,
+  - optional confidence threshold filtering,
+  - optional guard to only update rows that are currently placeholder/HS-style descriptions.
+- Import path supports description updates and optional HS/Country updates (explicitly toggled by user); duty rates are untouched.
+- Refined the **Tools** tab UI with clearer hierarchy, a full-width curation workflow card, cleaner spacing, and an inline collapsible response-schema reference to improve usability for operations teams.
+- Expanded curation scope to include incomplete profiles (`description`, `hs_code`, `country_code`) in prompt exports, with explicit output schema for optional `suggested_hs_code` / `suggested_country_code` fields and import-time apply toggles/guards.
+- Added richer export context for curation quality (`top_title_terms`, linked category paths, category default HS/origin hints) plus importer guards for `needs_review` and per-field confidence thresholds.
+
+## 2026-02-27 - JSON Import Parser + Advanced Mapping UX
+
+- Updated JSON duty import parsing to better support Zonos-style `entries[]` payloads where channel rates include helper fields like `*_fx_rate_duty`.
+- Added importer safeguard to ignore `*_fx_rate_duty` keys (enabled by default) when building duty rate percentages, preventing inflated duty calculations.
+- Improved fallback description handling so placeholder values like `N/A` are replaced with `HS <code>` when HS is available.
+- Improved JSON error visibility by surfacing the actual decode error message.
+- Refined Import/Export UI: moved JSON schema mapping into a collapsible **Advanced JSON Mapping** section so standard imports stay uncluttered while power users can still customize paths.
+
 ## 2026-02-24 - HS Manager Catalog Integration (v0.2.0)
 
 - Major UX shift: HS management now runs inside the main product catalog as an `HS Manager` view/tab on `Products > All Products`.
