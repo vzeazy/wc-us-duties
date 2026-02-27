@@ -59,7 +59,7 @@ class WRD_Settings {
         foreach ($modes as $k => $label) {
             printf('<option value="%s" %s>%s</option>', esc_attr($k), selected($opt['ddp_mode'], $k, false), esc_html($label));
         }
-        echo '</select></td></tr>';
+        echo '</select><p class="description">' . esc_html__('DDP collects estimated duties at checkout. DAP shows an estimate and charges duties on delivery.', 'woocommerce-us-duties') . '</p></td></tr>';
         echo '<tr><th><label>' . esc_html__('Fee Label', 'woocommerce-us-duties') . '</label></th><td><input type="text" name="fee_label" class="regular-text" value="' . esc_attr($opt['fee_label']) . '" /></td></tr>';
         echo '<tr><th><label>' . esc_html__('US Only', 'woocommerce-us-duties') . '</label></th><td><label><input type="checkbox" name="us_only" value="1" ' . checked(1, (int)$opt['us_only'], false) . ' /> ' . esc_html__('Estimate for US destinations only', 'woocommerce-us-duties') . '</label></td></tr>';
         echo '<tr><th><label>' . esc_html__('Missing Profile Behavior', 'woocommerce-us-duties') . '</label></th><td>';
@@ -68,13 +68,11 @@ class WRD_Settings {
             printf('<option value="%s" %s>%s</option>', esc_attr($k), selected($opt['missing_profile_behavior'], $k, false), esc_html($label));
         }
         echo '</select></td></tr>';
-        echo '<tr><th><label>' . esc_html__('Min Split Savings (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="min_split_savings" value="' . esc_attr($opt['min_split_savings']) . '" /></td></tr>';
-        echo '<tr><th><label>' . esc_html__('Postal Informal Threshold (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="postal_informal_threshold_usd" value="' . esc_attr($opt['postal_informal_threshold_usd']) . '" /></td></tr>';
         echo '</tbody></table>';
 
         echo '<h2>' . esc_html__('Calculation', 'woocommerce-us-duties') . '</h2>';
         echo '<table class="form-table" role="presentation"><tbody>';
-        echo '<tr><th><label>' . esc_html__('CUSMA duty-free', 'woocommerce-us-duties') . '</label></th><td><label><input type="checkbox" name="cusma_auto" value="1" ' . checked(1, (int)$opt['cusma_auto'], false) . ' /> ' . esc_html__('Treat origins in list as duty-free into US (line-item)', 'woocommerce-us-duties') . '</label><br/>';
+        echo '<tr><th><label>' . esc_html__('CUSMA / USMCA Duty-Free', 'woocommerce-us-duties') . '</label></th><td><label><input type="checkbox" name="cusma_auto" value="1" ' . checked(1, (int)$opt['cusma_auto'], false) . ' /> ' . esc_html__('Treat listed origin countries as duty-free for US imports when eligible', 'woocommerce-us-duties') . '</label><br/>';
         echo '<input type="text" name="cusma_countries" class="regular-text" value="' . esc_attr($opt['cusma_countries']) . '" /> <span class="description">' . esc_html__('Comma-separated ISO-2 list, e.g., CA,US[,MX]', 'woocommerce-us-duties') . '</span></td></tr>';
         echo '<tr><th><label>' . esc_html__('Min Split Savings (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="min_split_savings" value="' . esc_attr($opt['min_split_savings']) . '" /></td></tr>';
         echo '<tr><th><label>' . esc_html__('Postal Informal Threshold (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="postal_informal_threshold_usd" value="' . esc_attr($opt['postal_informal_threshold_usd']) . '" /></td></tr>';

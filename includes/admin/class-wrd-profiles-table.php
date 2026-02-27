@@ -167,7 +167,7 @@ class WRD_Profiles_Table extends WP_List_Table {
             $ids = array_map('intval', $ids);
             
             if ($ids) {
-                $updated = $this->handle_bulk_date_update($ids);
+                $updated = $this->handle_bulk_profile_update($ids);
                 if ($updated > 0) {
                     add_action('admin_notices', function() use ($updated) {
                         echo '<div class="notice notice-success is-dismissible"><p>' . 
@@ -182,7 +182,7 @@ class WRD_Profiles_Table extends WP_List_Table {
         }
     }
 
-    private function handle_bulk_date_update($ids) {
+    private function handle_bulk_profile_update($ids) {
         global $wpdb;
         $table = WRD_DB::table_profiles();
         $updated = 0;
@@ -192,6 +192,19 @@ class WRD_Profiles_Table extends WP_List_Table {
         $to_action = isset($_REQUEST['bulk_effective_to_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_to_action'])) : '';
         $from_date = isset($_REQUEST['bulk_effective_from']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_from'])) : '';
         $to_date = isset($_REQUEST['bulk_effective_to']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_effective_to'])) : '';
+
+        // Rates/CUSMA/notes actions
+        $postal_action = isset($_REQUEST['bulk_postal_rate_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_postal_rate_action'])) : '';
+        $commercial_action = isset($_REQUEST['bulk_commercial_rate_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_commercial_rate_action'])) : '';
+        $cusma_action = isset($_REQUEST['bulk_cusma_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_cusma_action'])) : '';
+        $notes_action = isset($_REQUEST['bulk_notes_action']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_notes_action'])) : '';
+
+        $postal_rate_raw = isset($_REQUEST['bulk_postal_rate']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_postal_rate'])) : '';
+        $commercial_rate_raw = isset($_REQUEST['bulk_commercial_rate']) ? sanitize_text_field(wp_unslash($_REQUEST['bulk_commercial_rate'])) : '';
+        $notes_value = isset($_REQUEST['bulk_notes']) ? wp_kses_post(wp_unslash($_REQUEST['bulk_notes'])) : '';
+
+        $postal_rate = is_numeric($postal_rate_raw) ? (float) $postal_rate_raw : null;
+        $commercial_rate = is_numeric($commercial_rate_raw) ? (float) $commercial_rate_raw : null;
         
         // Fallback to old format for backward compatibility
         if (empty($from_action) && empty($to_action)) {
@@ -206,8 +219,19 @@ class WRD_Profiles_Table extends WP_List_Table {
         $is_date = function($d) { return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d); };
         
         foreach ($ids as $id) {
+            $current = $wpdb->get_row(
+                $wpdb->prepare("SELECT us_duty_json, fta_flags, notes FROM {$table} WHERE id = %d", $id),
+                ARRAY_A
+            );
+            if (!$current) {
+                continue;
+            }
+
             $data = [];
             $fmt = [];
+            $udj_changed = false;
+            $fta_changed = false;
+            $notes_changed = false;
             
             // Handle effective_from
             if ($from_action === 'set' && $is_date($from_date)) {
@@ -226,10 +250,91 @@ class WRD_Profiles_Table extends WP_List_Table {
                 $data['effective_to'] = null;
                 $fmt[] = '%s';
             }
+
+            $udj = [];
+            if (isset($current['us_duty_json']) && $current['us_duty_json'] !== '') {
+                $udj = json_decode((string) $current['us_duty_json'], true);
+            }
+            if (!is_array($udj)) {
+                $udj = [];
+            }
+            if (!isset($udj['postal']) || !is_array($udj['postal'])) {
+                $udj['postal'] = [];
+            }
+            if (!isset($udj['postal']['rates']) || !is_array($udj['postal']['rates'])) {
+                $udj['postal']['rates'] = [];
+            }
+            if (!isset($udj['commercial']) || !is_array($udj['commercial'])) {
+                $udj['commercial'] = [];
+            }
+            if (!isset($udj['commercial']['rates']) || !is_array($udj['commercial']['rates'])) {
+                $udj['commercial']['rates'] = [];
+            }
+
+            if ($postal_action === 'set' && $postal_rate !== null && $postal_rate >= 0 && $postal_rate <= 100) {
+                $udj['postal']['rates']['base'] = (float) $postal_rate;
+                $udj_changed = true;
+            } elseif ($postal_action === 'clear' && array_key_exists('base', $udj['postal']['rates'])) {
+                unset($udj['postal']['rates']['base']);
+                $udj_changed = true;
+            }
+
+            if ($commercial_action === 'set' && $commercial_rate !== null && $commercial_rate >= 0 && $commercial_rate <= 100) {
+                $udj['commercial']['rates']['base'] = (float) $commercial_rate;
+                $udj_changed = true;
+            } elseif ($commercial_action === 'clear' && array_key_exists('base', $udj['commercial']['rates'])) {
+                unset($udj['commercial']['rates']['base']);
+                $udj_changed = true;
+            }
+
+            $fta_flags = [];
+            if (isset($current['fta_flags']) && $current['fta_flags'] !== '') {
+                $fta_flags = json_decode((string) $current['fta_flags'], true);
+            }
+            if (!is_array($fta_flags)) {
+                $fta_flags = [];
+            }
+
+            if ($cusma_action === 'enable' && !in_array('CUSMA', $fta_flags, true)) {
+                $fta_flags[] = 'CUSMA';
+                $fta_changed = true;
+            } elseif ($cusma_action === 'disable' && in_array('CUSMA', $fta_flags, true)) {
+                $fta_flags = array_values(array_filter($fta_flags, function($flag) {
+                    return $flag !== 'CUSMA';
+                }));
+                $fta_changed = true;
+            }
+
+            $current_notes = isset($current['notes']) ? (string) $current['notes'] : '';
+            if ($notes_action === 'replace') {
+                $data['notes'] = $notes_value;
+                $fmt[] = '%s';
+                $notes_changed = true;
+            } elseif ($notes_action === 'append') {
+                if ($notes_value !== '') {
+                    $data['notes'] = $current_notes === '' ? $notes_value : ($current_notes . "\n" . $notes_value);
+                    $fmt[] = '%s';
+                    $notes_changed = true;
+                }
+            } elseif ($notes_action === 'clear') {
+                $data['notes'] = '';
+                $fmt[] = '%s';
+                $notes_changed = true;
+            }
+
+            if ($udj_changed) {
+                $data['us_duty_json'] = wp_json_encode($udj, JSON_UNESCAPED_SLASHES);
+                $fmt[] = '%s';
+            }
+
+            if ($fta_changed) {
+                $data['fta_flags'] = wp_json_encode(array_values($fta_flags));
+                $fmt[] = '%s';
+            }
             
             if (!empty($data)) {
                 $result = $wpdb->update($table, $data, ['id' => $id], $fmt, ['%d']);
-                if ($result !== false) {
+                if ($result !== false && ($result > 0 || $udj_changed || $fta_changed || $notes_changed)) {
                     $updated++;
                 }
             }

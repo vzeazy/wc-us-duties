@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce US Duties & Customs
  * Description: Estimate US import duties/fees at checkout and route shipments using global customs profiles keyed by description|origin. HPOS compatible. Includes import/export tools.
  * Author: Webme Media Group
- * Version: 0.1.0
+ * Version: 0.2.0
  * Requires Plugins: woocommerce
  * Requires at least: 6.1
  * Tested up to: 6.6
@@ -13,7 +13,7 @@
 
 if (!defined('ABSPATH')) { exit; }
 
-define('WRD_US_DUTY_VERSION', '0.1.0');
+define('WRD_US_DUTY_VERSION', '0.2.0');
 define('WRD_US_DUTY_FILE', __FILE__);
 define('WRD_US_DUTY_DIR', plugin_dir_path(__FILE__));
 define('WRD_US_DUTY_URL', plugin_dir_url(__FILE__));
@@ -57,7 +57,11 @@ add_action('init', function(){
 // Nice admin shortcuts on the Plugins list row
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
     if (!current_user_can('manage_woocommerce')) { return $links; }
-    $manager = sprintf('<a href="%s"><strong>%s</strong></a>', esc_url(admin_url('admin.php?page=wrd-duty-manager')), esc_html__('Duty Manager', 'woocommerce-us-duties'));
+    $manager_url = add_query_arg([
+        'post_type' => 'product',
+        'wrd_catalog_mode' => 'hs_manager',
+    ], admin_url('edit.php'));
+    $manager = sprintf('<a href="%s"><strong>%s</strong></a>', esc_url($manager_url), esc_html__('HS Manager', 'woocommerce-us-duties'));
     $settings = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=settings')), esc_html__('Settings', 'woocommerce-us-duties'));
     $profiles = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=profiles')), esc_html__('Customs & Duties', 'woocommerce-us-duties'));
     $import = sprintf('<a href="%s">%s</a>', esc_url(admin_url('admin.php?page=wrd-customs&tab=import')), esc_html__('Import/Export', 'woocommerce-us-duties'));

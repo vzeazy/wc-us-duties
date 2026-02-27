@@ -2,6 +2,19 @@
 if (!defined('ABSPATH')) { exit; }
 
 class WRD_Admin {
+    private const PRODUCT_CATALOG_MODE_QUERY_VAR = 'wrd_catalog_mode';
+    private const PRODUCT_CATALOG_MODE_HS_MANAGER = 'hs_manager';
+    private const PRODUCT_CUSTOMS_VIEW_QUERY_VAR = 'wrd_customs_view';
+    private const PRODUCT_CUSTOMS_FILTER_QUERY_VAR = 'wrd_customs_status';
+    private const PRODUCT_CUSTOMS_COUNT_CACHE_KEY = 'wrd_product_customs_view_counts_v1';
+    private const PRODUCT_CUSTOMS_STATUSES = [
+        'needs_hs',
+        'needs_origin',
+        'missing_profile',
+        'legacy',
+        'ready',
+    ];
+
     public function init(): void {
         // Product fields
         add_action('woocommerce_product_options_shipping', [$this, 'product_fields']);
@@ -28,6 +41,12 @@ class WRD_Admin {
         // Products list: customs status column
         add_filter('manage_edit-product_columns', [$this, 'add_product_customs_column']);
         add_action('manage_product_posts_custom_column', [$this, 'render_product_customs_column'], 10, 2);
+        add_filter('manage_edit-product_sortable_columns', [$this, 'add_product_customs_sortable_column']);
+        add_filter('views_edit-product', [$this, 'filter_product_views']);
+        add_action('restrict_manage_posts', [$this, 'render_product_status_filter']);
+        add_action('pre_get_posts', [$this, 'apply_product_status_filters']);
+        add_action('admin_notices', [$this, 'render_hs_manager_catalog_notice']);
+        add_action('admin_head-edit.php', [$this, 'render_hs_manager_catalog_styles']);
         add_filter('post_row_actions', [$this, 'add_assign_profile_row_action'], 10, 2);
 
         // Quick Edit / Bulk Edit fields
@@ -43,6 +62,7 @@ class WRD_Admin {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_wrd_search_profiles', [$this, 'ajax_search_profiles']);
         add_action('wp_ajax_wrd_reconcile_assign', [$this, 'ajax_reconcile_assign']);
+        add_action('wp_ajax_wrd_reconcile_assign_bulk', [$this, 'ajax_reconcile_assign_bulk']);
         add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
         add_action('wp_ajax_wrd_quick_assign_profile', [$this, 'ajax_quick_assign_profile']);
         add_action('admin_footer', [$this, 'render_inline_assign_template']);
@@ -250,8 +270,9 @@ class WRD_Admin {
             echo '</p>';
         }
         if (isset($snapshot['currency'])) {
-            echo '<p style="margin: 0;"><strong>' . esc_html__('Currency:', 'woocommerce-us-duties') . '</strong> ' . esc_html($snapshot['currency']) . '</p>';
+            echo '<p style="margin: 0;"><strong>' . esc_html__('Checkout Currency:', 'woocommerce-us-duties') . '</strong> ' . esc_html($snapshot['currency']) . '</p>';
         }
+        echo '<p style="margin: 8px 0 0 0;"><strong>' . esc_html__('Duty Calculation Currency:', 'woocommerce-us-duties') . '</strong> USD</p>';
         echo '</div>';
 
         // Product line items table
@@ -278,8 +299,8 @@ class WRD_Admin {
             $origin = $line['origin'] ?? '-';
             $channel = $line['channel'] ?? '-';
             $rate = isset($line['rate_pct']) ? number_format($line['rate_pct'], 2) . '%' : '-';
-            $value = isset($line['value_usd']) ? '$' . number_format($line['value_usd'], 2) : '-';
-            $duty = isset($line['duty_usd']) ? '$' . number_format($line['duty_usd'], 2) : '-';
+            $value = isset($line['value_usd']) ? wc_price((float) $line['value_usd'], ['currency' => 'USD']) : '-';
+            $duty = isset($line['duty_usd']) ? wc_price((float) $line['duty_usd'], ['currency' => 'USD']) : '-';
             $cusma = !empty($line['cusma']) ? '✓' : '-';
 
             echo '<tr>';
@@ -288,8 +309,8 @@ class WRD_Admin {
             echo '<td style="padding: 8px;">' . esc_html($origin) . '</td>';
             echo '<td style="padding: 8px;">' . esc_html(ucfirst($channel)) . '</td>';
             echo '<td style="padding: 8px; text-align: right;">' . esc_html($rate) . '</td>';
-            echo '<td style="padding: 8px; text-align: right;">' . esc_html($value) . '</td>';
-            echo '<td style="padding: 8px; text-align: right;">' . esc_html($duty) . '</td>';
+            echo '<td style="padding: 8px; text-align: right;">' . wp_kses_post($value) . '</td>';
+            echo '<td style="padding: 8px; text-align: right;">' . wp_kses_post($duty) . '</td>';
             echo '<td style="padding: 8px; text-align: center;">' . esc_html($cusma) . '</td>';
             echo '</tr>';
         }
@@ -304,11 +325,11 @@ class WRD_Admin {
             $comp = $snapshot['composition'];
             echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
             echo '<span>' . esc_html__('CUSMA Duty-Free Value:', 'woocommerce-us-duties') . '</span>';
-            echo '<strong>$' . number_format($comp['cusma_value_usd'] ?? 0, 2) . '</strong>';
+            echo '<strong>' . wp_kses_post(wc_price((float)($comp['cusma_value_usd'] ?? 0), ['currency' => 'USD'])) . '</strong>';
             echo '</div>';
             echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
             echo '<span>' . esc_html__('Dutiable Value:', 'woocommerce-us-duties') . '</span>';
-            echo '<strong>$' . number_format($comp['non_cusma_value_usd'] ?? 0, 2) . '</strong>';
+            echo '<strong>' . wp_kses_post(wc_price((float)($comp['non_cusma_value_usd'] ?? 0), ['currency' => 'USD'])) . '</strong>';
             echo '</div>';
             echo '<hr style="margin: 8px 0; border: none; border-top: 1px solid #dcdcde;">';
         }
@@ -316,7 +337,7 @@ class WRD_Admin {
         if (isset($snapshot['total_usd'])) {
             echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
             echo '<span>' . esc_html__('Total Duties:', 'woocommerce-us-duties') . '</span>';
-            echo '<strong>$' . number_format($snapshot['total_usd'], 2) . '</strong>';
+            echo '<strong>' . wp_kses_post(wc_price((float)$snapshot['total_usd'], ['currency' => 'USD'])) . '</strong>';
             echo '</div>';
         }
 
@@ -324,7 +345,7 @@ class WRD_Admin {
             foreach ($snapshot['fees'] as $fee) {
                 echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
                 echo '<span>' . esc_html($fee['label']) . ':</span>';
-                echo '<strong>$' . number_format($fee['amount_usd'], 2) . '</strong>';
+                echo '<strong>' . wp_kses_post(wc_price((float)$fee['amount_usd'], ['currency' => 'USD'])) . '</strong>';
                 echo '</div>';
             }
         }
@@ -332,7 +353,7 @@ class WRD_Admin {
         if (isset($snapshot['fees_usd'])) {
             echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
             echo '<span>' . esc_html__('Total Fees:', 'woocommerce-us-duties') . '</span>';
-            echo '<strong>$' . number_format($snapshot['fees_usd'], 2) . '</strong>';
+            echo '<strong>' . wp_kses_post(wc_price((float)$snapshot['fees_usd'], ['currency' => 'USD'])) . '</strong>';
             echo '</div>';
         }
 
@@ -340,7 +361,7 @@ class WRD_Admin {
         echo '<hr style="margin: 8px 0; border: none; border-top: 1px solid #dcdcde;">';
         echo '<div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 1.1em;">';
         echo '<strong>' . esc_html__('Grand Total (USD):', 'woocommerce-us-duties') . '</strong>';
-        echo '<strong style="color: #2271b1;">$' . number_format($grand_total, 2) . '</strong>';
+        echo '<strong style="color: #2271b1;">' . wp_kses_post(wc_price((float)$grand_total, ['currency' => 'USD'])) . '</strong>';
         echo '</div>';
 
         echo '</div>';
@@ -359,17 +380,8 @@ class WRD_Admin {
     public function admin_menu(): void {
         add_submenu_page(
             'woocommerce',
-            __('Duty Manager', 'wrd-us-duty'),
-            __('Duty Manager', 'wrd-us-duty'),
-            'manage_woocommerce',
-            'wrd-duty-manager',
-            [$this, 'render_duty_manager']
-        );
-        
-        add_submenu_page(
-            'woocommerce',
-            __('Customs & Duties', 'wrd-us-duty'),
-            __('Customs & Duties', 'wrd-us-duty'),
+            __('Customs & Duties', 'woocommerce-us-duties'),
+            __('Customs & Duties', 'woocommerce-us-duties'),
             'manage_woocommerce',
             'wrd-customs',
             [$this, 'render_customs_hub']
@@ -377,9 +389,11 @@ class WRD_Admin {
     }
     
     public function render_duty_manager(): void {
-        require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-duty-manager.php';
-        $manager = new WRD_Duty_Manager();
-        $manager->render_page();
+        wp_safe_redirect(add_query_arg([
+            'post_type' => 'product',
+            self::PRODUCT_CATALOG_MODE_QUERY_VAR => self::PRODUCT_CATALOG_MODE_HS_MANAGER,
+        ], admin_url('edit.php')));
+        exit;
     }
 
 
@@ -439,16 +453,26 @@ class WRD_Admin {
             // Handle save
             if (!empty($_POST['wrd_profile_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_profile_nonce'])), 'wrd_save_profile')) {
                 $this->save_profile_from_post();
-                echo '<div class="updated"><p>' . esc_html__('Profile saved.', 'wrd-us-duty') . '</p></div>';
+                echo '<div class="updated"><p>' . esc_html__('Profile saved.', 'woocommerce-us-duties') . '</p></div>';
             }
             $this->render_profile_form();
             return;
         }
-    $newUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'profiles', 'action' => 'new'], admin_url('admin.php'));
-    $exportUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'] + array_intersect_key($_GET, ['s' => true]), admin_url('admin.php'));
-        echo '<a href="' . esc_url($newUrl) . '" class="page-title-action">' . esc_html__('Add New', 'woocommerce-us-duties') . '</a> ';
-        echo '<a href="' . esc_url($exportUrl) . '" class="page-title-action">' . esc_html__('Export CSV', 'woocommerce-us-duties') . '</a>';
-        echo '<hr class="wp-header-end" />';
+        $newUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'profiles', 'action' => 'new'], admin_url('admin.php'));
+        $exportUrl = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'] + array_intersect_key($_GET, ['s' => true]), admin_url('admin.php'));
+        echo '<style>
+            .wrd-profiles-actions {
+                margin: 12px 0 14px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+            }
+        </style>';
+        echo '<div class="wrd-profiles-actions">';
+        echo '<a href="' . esc_url($newUrl) . '" class="button button-primary">' . esc_html__('Add New', 'woocommerce-us-duties') . '</a>';
+        echo '<a href="' . esc_url($exportUrl) . '" class="button">' . esc_html__('Export CSV', 'woocommerce-us-duties') . '</a>';
+        echo '</div>';
 
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-profiles-table.php';
         $table = new WRD_Profiles_Table();
@@ -472,6 +496,11 @@ class WRD_Admin {
                 'confirm_delete' => __('Are you sure you want to delete the selected profiles?', 'woocommerce-us-duties'),
                 'no_items_selected' => __('Please select items to perform bulk actions.', 'woocommerce-us-duties'),
                 'processing' => __('Processing...', 'woocommerce-us-duties'),
+                'select_action' => __('Please select at least one bulk action to perform.', 'woocommerce-us-duties'),
+                'enter_date' => __('Please enter a date for the selected action.', 'woocommerce-us-duties'),
+                'enter_rate' => __('Please enter a rate for the selected action.', 'woocommerce-us-duties'),
+                'invalid_rate' => __('Please enter a valid rate between 0 and 100.', 'woocommerce-us-duties'),
+                'enter_notes' => __('Please enter notes text for the selected action.', 'woocommerce-us-duties'),
             ]
         ]);
     }
@@ -482,12 +511,12 @@ class WRD_Admin {
             <div class="alignleft actions bulkactions">
                 <div class="bulk-edit-fields">
                     <fieldset class="inline-edit-col-left">
-                        <legend class="inline-edit-legend"><?php esc_html_e('Bulk Edit Effective Dates', 'woocommerce-us-duties'); ?></legend>
+                        <legend class="inline-edit-legend"><?php esc_html_e('Bulk Edit Profiles', 'woocommerce-us-duties'); ?></legend>
                         <div class="inline-edit-col">
                             <label class="alignleft">
                                 <span class="title"><?php esc_html_e('Effective From', 'woocommerce-us-duties'); ?></span>
                                 <span class="input-text-wrap">
-                                    <select name="bulk_effective_from_action" class="bulk-date-action">
+                                    <select name="bulk_effective_from_action" class="bulk-date-action wrd-bulk-action-select">
                                         <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
                                         <option value="set"><?php esc_html_e('Set to:', 'woocommerce-us-duties'); ?></option>
                                         <option value="clear"><?php esc_html_e('Clear', 'woocommerce-us-duties'); ?></option>
@@ -500,12 +529,64 @@ class WRD_Admin {
                             <label class="alignleft">
                                 <span class="title"><?php esc_html_e('Effective To', 'woocommerce-us-duties'); ?></span>
                                 <span class="input-text-wrap">
-                                    <select name="bulk_effective_to_action" class="bulk-date-action">
+                                    <select name="bulk_effective_to_action" class="bulk-date-action wrd-bulk-action-select">
                                         <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
                                         <option value="set"><?php esc_html_e('Set to:', 'woocommerce-us-duties'); ?></option>
                                         <option value="clear"><?php esc_html_e('Clear (never expires)', 'woocommerce-us-duties'); ?></option>
                                     </select>
                                     <input type="date" name="bulk_effective_to" class="bulk-date-input" style="display: none;" />
+                                </span>
+                            </label>
+                        </div>
+                        <div class="inline-edit-col">
+                            <label class="alignleft">
+                                <span class="title"><?php esc_html_e('Postal Duty Rate (%)', 'woocommerce-us-duties'); ?></span>
+                                <span class="input-text-wrap">
+                                    <select name="bulk_postal_rate_action" class="bulk-rate-action wrd-bulk-action-select">
+                                        <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
+                                        <option value="set"><?php esc_html_e('Set to:', 'woocommerce-us-duties'); ?></option>
+                                        <option value="clear"><?php esc_html_e('Clear base rate', 'woocommerce-us-duties'); ?></option>
+                                    </select>
+                                    <input type="number" min="0" max="100" step="0.0001" name="bulk_postal_rate" class="bulk-rate-input" style="display: none;" />
+                                </span>
+                            </label>
+                        </div>
+                        <div class="inline-edit-col">
+                            <label class="alignleft">
+                                <span class="title"><?php esc_html_e('Commercial Duty Rate (%)', 'woocommerce-us-duties'); ?></span>
+                                <span class="input-text-wrap">
+                                    <select name="bulk_commercial_rate_action" class="bulk-rate-action wrd-bulk-action-select">
+                                        <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
+                                        <option value="set"><?php esc_html_e('Set to:', 'woocommerce-us-duties'); ?></option>
+                                        <option value="clear"><?php esc_html_e('Clear base rate', 'woocommerce-us-duties'); ?></option>
+                                    </select>
+                                    <input type="number" min="0" max="100" step="0.0001" name="bulk_commercial_rate" class="bulk-rate-input" style="display: none;" />
+                                </span>
+                            </label>
+                        </div>
+                        <div class="inline-edit-col">
+                            <label class="alignleft">
+                                <span class="title"><?php esc_html_e('CUSMA', 'woocommerce-us-duties'); ?></span>
+                                <span class="input-text-wrap">
+                                    <select name="bulk_cusma_action" class="wrd-bulk-action-select">
+                                        <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
+                                        <option value="enable"><?php esc_html_e('Enable', 'woocommerce-us-duties'); ?></option>
+                                        <option value="disable"><?php esc_html_e('Disable', 'woocommerce-us-duties'); ?></option>
+                                    </select>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="inline-edit-col">
+                            <label class="alignleft">
+                                <span class="title"><?php esc_html_e('Notes', 'woocommerce-us-duties'); ?></span>
+                                <span class="input-text-wrap">
+                                    <select name="bulk_notes_action" class="bulk-notes-action wrd-bulk-action-select">
+                                        <option value=""><?php esc_html_e('— No change —', 'woocommerce-us-duties'); ?></option>
+                                        <option value="replace"><?php esc_html_e('Replace with:', 'woocommerce-us-duties'); ?></option>
+                                        <option value="append"><?php esc_html_e('Append:', 'woocommerce-us-duties'); ?></option>
+                                        <option value="clear"><?php esc_html_e('Clear', 'woocommerce-us-duties'); ?></option>
+                                    </select>
+                                    <textarea name="bulk_notes" class="bulk-notes-input" rows="2" style="display: none; width: 100%;"></textarea>
                                 </span>
                             </label>
                         </div>
@@ -524,270 +605,1345 @@ class WRD_Admin {
     }
 
     private function render_tab_import_export(): void {
-        echo '<h2>' . esc_html__('Import CSV (Profiles)', 'woocommerce-us-duties') . '</h2>';
-        echo '<form method="post" enctype="multipart/form-data">';
-        wp_nonce_field('wrd_import_csv', 'wrd_import_nonce');
-        echo '<p><input type="file" name="wrd_csv" accept=".csv" required /></p>';
-        echo '<p><strong>' . esc_html__('Header Mapping (optional)', 'woocommerce-us-duties') . '</strong><br/>';
-        echo esc_html__('Leave blank to use standard names: description, country_code, hs_code, fta_flags, us_duty_json, effective_from, effective_to, notes.', 'woocommerce-us-duties') . '</p>';
-        echo '<p>';
-        echo '<label>' . esc_html__('Description', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_description" placeholder="description" /></label> ';
-        echo '<label>' . esc_html__('Country Code', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_country" placeholder="country_code" /></label> ';
-        echo '<label>' . esc_html__('HS Code', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_hs" placeholder="hs_code" /></label>';
-        echo '</p>';
-        echo '<p>';
-        echo '<label>' . esc_html__('FTA Flags (JSON)', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_fta" placeholder="fta_flags" /></label> ';
-        echo '<label>' . esc_html__('US Duty JSON', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_udj" placeholder="us_duty_json" /></label>';
-        echo '</p>';
-        echo '<p>';
-        echo '<label>' . esc_html__('Effective From', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_from" placeholder="effective_from" /></label> ';
-        echo '<label>' . esc_html__('Effective To', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_to" placeholder="effective_to" /></label> ';
-        echo '<label>' . esc_html__('Notes', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_notes" placeholder="notes" /></label>';
-        echo '</p>';
-        echo '<p><label><input type="checkbox" name="profiles_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
-        submit_button(__('Import', 'woocommerce-us-duties'));
-        echo '</form>';
+        $notices = [];
 
-    // Quick export links
-    $export_profiles_url = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'], admin_url('admin.php'));
-    $export_products_url = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export_products'], admin_url('admin.php'));
-    echo '<p style="margin-top:8px;">';
-    echo '<a href="' . esc_url($export_profiles_url) . '" class="button">' . esc_html__('Export Profiles CSV', 'woocommerce-us-duties') . '</a> ';
-    echo '<a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a>';
-    echo '</p>';
-
-    echo '<h2>' . esc_html__('Import Duties JSON File', 'woocommerce-us-duties') . '</h2>';
-        echo '<form method="post" enctype="multipart/form-data" style="margin-top:8px;">';
-        wp_nonce_field('wrd_import_json', 'wrd_import_json_nonce');
-        echo '<p><input type="file" name="wrd_json" accept="application/json,.json" required /></p>';
-        echo '<p><label>Effective From <input type="date" name="effective_from" value="' . esc_attr(date('Y-m-d')) . '" required /></label></p>';
-    echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same HS code, country, and date', 'woocommerce-us-duties') . '</label></p>';
-    echo '<p><label>Notes (optional)<br/><input type="text" name="notes" class="regular-text" placeholder="Imported duties file" /></label></p>';
-        submit_button(__('Import JSON', 'woocommerce-us-duties'));
-        echo '</form>';
-
-        echo '<h2>' . esc_html__('Cleanup Duplicate Profiles', 'woocommerce-us-duties') . '</h2>';
-        echo '<p>' . esc_html__('Merge duplicate profiles that have the same HS code and country code. Only processes profiles with HS codes. Product assignments will be preserved and moved to the canonical profile.', 'woocommerce-us-duties') . '</p>';
-        echo '<form method="post" style="margin-top:8px;">';
-        wp_nonce_field('wrd_cleanup_duplicates', 'wrd_cleanup_nonce');
-        echo '<p><label><input type="checkbox" name="cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
-        submit_button(__('Find & Merge Duplicates', 'woocommerce-us-duties'), 'secondary');
-        echo '</form>';
-
-        echo '<h2>' . esc_html__('Migrate Products to HS Codes', 'woocommerce-us-duties') . '</h2>';
-        echo '<p>' . esc_html__('For products missing HS codes, look up matching profiles by description + country and populate the HS code from the profile.', 'woocommerce-us-duties') . '</p>';
-        echo '<form method="post" style="margin-top:8px;">';
-        wp_nonce_field('wrd_migrate_hs', 'wrd_migrate_hs_nonce');
-        echo '<p><label><input type="checkbox" name="migrate_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
-        echo '<p><label>' . esc_html__('Limit', 'woocommerce-us-duties') . ' <input type="number" name="migrate_limit" value="100" min="1" max="10000" style="width:80px" /> ' . esc_html__('products', 'woocommerce-us-duties') . '</label></p>';
-        submit_button(__('Migrate HS Codes', 'woocommerce-us-duties'), 'secondary');
-        echo '</form>';
-
-        // Handle Profiles CSV import
         if (!empty($_POST['wrd_import_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_import_nonce'])), 'wrd_import_csv')) {
             $summary = $this->handle_csv_import();
             if (is_array($summary)) {
-                echo '<div class="notice notice-info"><p>' . esc_html(sprintf(
-                    __('Profiles CSV: %1$d rows, %2$d inserted, %3$d updated, %4$d skipped, %5$d errors. (dry-run: %6$s)', 'woocommerce-us-duties'),
-                    (int)($summary['rows'] ?? 0), (int)($summary['inserted'] ?? 0), (int)($summary['updated'] ?? 0), (int)($summary['skipped'] ?? 0), (int)($summary['errors'] ?? 0), !empty($summary['dry_run']) ? 'yes' : 'no'
-                )) . '</p>';
-                if (!empty($summary['messages'])) {
-                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:220px;overflow:auto;">' . esc_html(implode("\n", array_slice($summary['messages'], 0, 50))) . '</pre></details>';
-                }
-                echo '</div>';
+                $notices[] = [
+                    'class' => 'notice notice-info',
+                    'message' => sprintf(
+                        __('Profiles CSV: %1$d rows, %2$d inserted, %3$d updated, %4$d skipped, %5$d errors. (dry-run: %6$s)', 'woocommerce-us-duties'),
+                        (int) ($summary['rows'] ?? 0),
+                        (int) ($summary['inserted'] ?? 0),
+                        (int) ($summary['updated'] ?? 0),
+                        (int) ($summary['skipped'] ?? 0),
+                        (int) ($summary['errors'] ?? 0),
+                        !empty($summary['dry_run']) ? 'yes' : 'no'
+                    ),
+                    'details' => !empty($summary['messages']) ? implode("\n", array_slice((array) $summary['messages'], 0, 50)) : '',
+                ];
             } else {
-                echo '<div class="updated"><p>' . esc_html__('Profiles CSV import completed.', 'woocommerce-us-duties') . '</p></div>';
+                $notices[] = [
+                    'class' => 'notice notice-success',
+                    'message' => __('Profiles CSV import completed.', 'woocommerce-us-duties'),
+                    'details' => '',
+                ];
             }
         }
 
-        // Handle duties JSON import
         if (!empty($_POST['wrd_import_json_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_import_json_nonce'])), 'wrd_import_json')) {
             $json_summary = $this->handle_duty_json_import();
             if (is_array($json_summary)) {
-                echo '<div class="notice notice-info"><p>' . esc_html(sprintf(
-                    /* translators: 1: inserted count, 2: updated count, 3: skipped count, 4: errors count */
-                    __('JSON Import: %1$d inserted, %2$d updated, %3$d skipped, %4$d errors.', 'woocommerce-us-duties'),
-                    (int)($json_summary['inserted'] ?? 0),
-                    (int)($json_summary['updated'] ?? 0),
-                    (int)($json_summary['skipped'] ?? 0),
-                    (int)($json_summary['errors'] ?? 0)
-                )) . '</p>';
-                if (!empty($json_summary['error_messages'])) {
-                    echo '<details><summary>' . esc_html__('Error details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:220px;overflow:auto;">' . esc_html(implode("\n", array_slice((array)$json_summary['error_messages'], 0, 50))) . '</pre></details>';
-                }
-                echo '</div>';
+                $notices[] = [
+                    'class' => 'notice notice-info',
+                    'message' => sprintf(
+                        /* translators: 1: inserted count, 2: updated count, 3: skipped count, 4: errors count */
+                        __('JSON Import: %1$d inserted, %2$d updated, %3$d skipped, %4$d errors.', 'woocommerce-us-duties'),
+                        (int) ($json_summary['inserted'] ?? 0),
+                        (int) ($json_summary['updated'] ?? 0),
+                        (int) ($json_summary['skipped'] ?? 0),
+                        (int) ($json_summary['errors'] ?? 0)
+                    ),
+                    'details' => !empty($json_summary['error_messages']) ? implode("\n", array_slice((array) $json_summary['error_messages'], 0, 50)) : '',
+                ];
             }
         }
 
-        // Handle duplicate cleanup
         if (!empty($_POST['wrd_cleanup_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_cleanup_nonce'])), 'wrd_cleanup_duplicates')) {
             $cleanup_summary = $this->handle_duplicate_cleanup();
             if (is_array($cleanup_summary)) {
-                echo '<div class="notice notice-success"><p>' . esc_html(sprintf(
-                    __('Cleanup: %1$d duplicates found, %2$d merged, %3$d products reassigned, %4$d profiles deleted. (dry-run: %5$s)', 'woocommerce-us-duties'),
-                    (int)($cleanup_summary['duplicates_found'] ?? 0),
-                    (int)($cleanup_summary['merged'] ?? 0),
-                    (int)($cleanup_summary['products_reassigned'] ?? 0),
-                    (int)($cleanup_summary['profiles_deleted'] ?? 0),
-                    !empty($cleanup_summary['dry_run']) ? 'yes' : 'no'
-                )) . '</p>';
-                if (!empty($cleanup_summary['messages'])) {
-                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:300px;overflow:auto;">' . esc_html(implode("\n", (array)$cleanup_summary['messages'])) . '</pre></details>';
-                }
-                echo '</div>';
+                $notices[] = [
+                    'class' => 'notice notice-success',
+                    'message' => sprintf(
+                        __('Cleanup: %1$d duplicates found, %2$d merged, %3$d products reassigned, %4$d profiles deleted. (dry-run: %5$s)', 'woocommerce-us-duties'),
+                        (int) ($cleanup_summary['duplicates_found'] ?? 0),
+                        (int) ($cleanup_summary['merged'] ?? 0),
+                        (int) ($cleanup_summary['products_reassigned'] ?? 0),
+                        (int) ($cleanup_summary['profiles_deleted'] ?? 0),
+                        !empty($cleanup_summary['dry_run']) ? 'yes' : 'no'
+                    ),
+                    'details' => !empty($cleanup_summary['messages']) ? implode("\n", (array) $cleanup_summary['messages']) : '',
+                ];
             }
         }
 
-        // Handle HS code migration
         if (!empty($_POST['wrd_migrate_hs_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_migrate_hs_nonce'])), 'wrd_migrate_hs')) {
             $migrate_summary = $this->handle_hs_migration();
             if (is_array($migrate_summary)) {
-                echo '<div class="notice notice-success"><p>' . esc_html(sprintf(
-                    __('Migration: %1$d products checked, %2$d missing HS codes, %3$d matched to profiles, %4$d updated. (dry-run: %5$s)', 'woocommerce-us-duties'),
-                    (int)($migrate_summary['checked'] ?? 0),
-                    (int)($migrate_summary['missing_hs'] ?? 0),
-                    (int)($migrate_summary['matched'] ?? 0),
-                    (int)($migrate_summary['updated'] ?? 0),
-                    !empty($migrate_summary['dry_run']) ? 'yes' : 'no'
-                )) . '</p>';
-                if (!empty($migrate_summary['messages'])) {
-                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:300px;overflow:auto;">' . esc_html(implode("\n", array_slice((array)$migrate_summary['messages'], 0, 100))) . '</pre></details>';
-                }
-                echo '</div>';
+                $notices[] = [
+                    'class' => 'notice notice-success',
+                    'message' => sprintf(
+                        __('Migration: %1$d products checked, %2$d missing HS codes, %3$d matched to profiles, %4$d updated. (dry-run: %5$s)', 'woocommerce-us-duties'),
+                        (int) ($migrate_summary['checked'] ?? 0),
+                        (int) ($migrate_summary['missing_hs'] ?? 0),
+                        (int) ($migrate_summary['matched'] ?? 0),
+                        (int) ($migrate_summary['updated'] ?? 0),
+                        !empty($migrate_summary['dry_run']) ? 'yes' : 'no'
+                    ),
+                    'details' => !empty($migrate_summary['messages']) ? implode("\n", array_slice((array) $migrate_summary['messages'], 0, 100)) : '',
+                ];
             }
         }
 
-        // Products CSV importer
         if (!empty($_POST['wrd_products_import_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_products_import_nonce'])), 'wrd_products_import')) {
             $summary = $this->handle_products_csv_import();
-            if ($summary) {
-                echo '<div class="notice notice-info"><p>' . esc_html(sprintf(__('Products CSV: %d rows, %d matched, %d updated, %d skipped, %d errors.', 'woocommerce-us-duties'), $summary['rows'], $summary['matched'], $summary['updated'], $summary['skipped'], $summary['errors'])) . '</p>';
-                if (!empty($summary['messages'])) {
-                    echo '<details><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre style="background:#fff;padding:8px;max-height:220px;overflow:auto;">' . esc_html(implode("\n", array_slice($summary['messages'], 0, 50))) . '</pre></details>';
-                }
-                echo '</div>';
+            if (is_array($summary)) {
+                $notices[] = [
+                    'class' => 'notice notice-info',
+                    'message' => sprintf(
+                        __('Products CSV: %1$d rows, %2$d matched, %3$d updated, %4$d skipped, %5$d errors.', 'woocommerce-us-duties'),
+                        (int) ($summary['rows'] ?? 0),
+                        (int) ($summary['matched'] ?? 0),
+                        (int) ($summary['updated'] ?? 0),
+                        (int) ($summary['skipped'] ?? 0),
+                        (int) ($summary['errors'] ?? 0)
+                    ),
+                    'details' => !empty($summary['messages']) ? implode("\n", array_slice((array) $summary['messages'], 0, 50)) : '',
+                ];
             }
         }
 
-        echo '<h2>' . esc_html__('Assign Customs to Products (CSV)', 'woocommerce-us-duties') . '</h2>';
-        echo '<p>' . esc_html__('Upload a CSV with columns for product ID/SKU, HS code, country code, and optionally description. HS code + country is preferred.', 'woocommerce-us-duties') . '</p>';
-        echo '<form method="post" enctype="multipart/form-data" style="margin-top:8px;">';
+        $export_profiles_url = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export'], admin_url('admin.php'));
+        $export_products_url = add_query_arg(['page' => 'wrd-customs', 'tab' => 'import', 'action' => 'export_products'], admin_url('admin.php'));
+
+        echo '<style>
+            .wrd-import-intro {
+                margin: 12px 0 16px;
+                color: #50575e;
+                max-width: 980px;
+            }
+            .wrd-import-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+                gap: 14px;
+                align-items: start;
+            }
+            .wrd-import-grid .postbox {
+                margin: 0;
+            }
+            .wrd-import-grid .postbox .hndle {
+                padding: 12px 14px;
+                border-bottom: 1px solid #e2e4e7;
+            }
+            .wrd-import-grid .postbox .inside {
+                margin: 0;
+                padding: 14px;
+            }
+            .wrd-import-grid .inside p.description {
+                margin-top: 0;
+                margin-bottom: 12px;
+                color: #646970;
+            }
+            .wrd-import-grid form p {
+                margin: 0 0 10px;
+            }
+            .wrd-import-form-row {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+            .wrd-import-form-row label {
+                display: block;
+                margin: 0;
+                color: #1d2327;
+                font-weight: 500;
+            }
+            .wrd-import-form-row input[type="text"],
+            .wrd-import-form-row input[type="date"],
+            .wrd-import-form-row input[type="number"],
+            .wrd-import-form-row select {
+                width: 100%;
+                margin-top: 4px;
+                min-width: 0;
+                max-width: none;
+            }
+            .wrd-import-form-note {
+                margin: 0 0 10px;
+                color: #646970;
+            }
+            .wrd-import-grid input[type="file"] {
+                width: 100%;
+                max-width: 560px;
+            }
+            .wrd-import-grid .regular-text {
+                width: 100%;
+                max-width: 560px;
+            }
+            .wrd-import-grid .submit {
+                margin: 0;
+                padding: 0;
+            }
+            .wrd-import-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .wrd-import-notice .details {
+                margin-top: 8px;
+            }
+            .wrd-import-notice pre {
+                background: #fff;
+                border: 1px solid #dcdcde;
+                padding: 8px;
+                max-height: 280px;
+                overflow: auto;
+                margin: 8px 0 0;
+            }
+        </style>';
+
+        echo '<p class="wrd-import-intro">' . esc_html__('Import and export profile/product data, plus run migration utilities. Start with dry-run for operations that update or delete data.', 'woocommerce-us-duties') . '</p>';
+
+        foreach ($notices as $notice) {
+            echo '<div class="' . esc_attr($notice['class']) . ' wrd-import-notice"><p>' . esc_html($notice['message']) . '</p>';
+            if (!empty($notice['details'])) {
+                echo '<details class="details"><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre>' . esc_html($notice['details']) . '</pre></details>';
+            }
+            echo '</div>';
+        }
+
+        echo '<div class="wrd-import-grid">';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Export', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Download current duty profiles or product customs assignments as CSV.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-actions"><a href="' . esc_url($export_profiles_url) . '" class="button">' . esc_html__('Export Profiles CSV', 'woocommerce-us-duties') . '</a> <a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a></p>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Import Profiles (CSV)', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Import profile records from CSV with optional header mapping.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post" enctype="multipart/form-data">';
+        wp_nonce_field('wrd_import_csv', 'wrd_import_nonce');
+        echo '<p><input type="file" name="wrd_csv" accept=".csv" required /></p>';
+        echo '<p class="wrd-import-form-note"><strong>' . esc_html__('Header Mapping (optional)', 'woocommerce-us-duties') . '</strong><br />' . esc_html__('Leave blank to use standard names: description, country_code, hs_code, fta_flags, us_duty_json, effective_from, effective_to, notes.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('Description', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_description" placeholder="description" /></label>';
+        echo '<label>' . esc_html__('Country Code', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_country" placeholder="country_code" /></label>';
+        echo '<label>' . esc_html__('HS Code', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_hs" placeholder="hs_code" /></label>';
+        echo '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('FTA Flags (JSON)', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_fta" placeholder="fta_flags" /></label>';
+        echo '<label>' . esc_html__('US Duty JSON', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_udj" placeholder="us_duty_json" /></label>';
+        echo '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('Effective From', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_from" placeholder="effective_from" /></label>';
+        echo '<label>' . esc_html__('Effective To', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_to" placeholder="effective_to" /></label>';
+        echo '<label>' . esc_html__('Notes', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_notes" placeholder="notes" /></label>';
+        echo '</p>';
+        echo '<p><label><input type="checkbox" name="profiles_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Import Profiles CSV', 'woocommerce-us-duties'), 'primary', '', false);
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Import Duties (JSON)', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Import duties JSON with optional schema path mapping for non-standard files.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post" enctype="multipart/form-data">';
+        wp_nonce_field('wrd_import_json', 'wrd_import_json_nonce');
+        echo '<p><input type="file" name="wrd_json" accept="application/json,.json" required /></p>';
+        echo '<p class="wrd-import-form-row"><label>' . esc_html__('Effective From', 'woocommerce-us-duties') . ' <input type="date" name="effective_from" value="' . esc_attr(date('Y-m-d')) . '" required /></label></p>';
+        echo '<p class="wrd-import-form-note"><strong>' . esc_html__('JSON Schema Mapping (optional)', 'woocommerce-us-duties') . '</strong><br />' . esc_html__('Use dot paths (for example: entries, country_of_origin, commercial.rates). You can provide fallbacks separated by |.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('Root entries path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_root" placeholder="entries" /></label>';
+        echo '<label>' . esc_html__('Description path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_description" placeholder="description|zonos_customs_description" /></label>';
+        echo '<label>' . esc_html__('Country path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_country" placeholder="origin|originCountry|country_of_origin" /></label>';
+        echo '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('HS path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_hs" placeholder="hs_code|hsCode" /></label>';
+        echo '<label>' . esc_html__('Postal rates path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_postal_rates" placeholder="postal.rates" /></label>';
+        echo '<label>' . esc_html__('Commercial rates path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_commercial_rates" placeholder="commercial.rates" /></label>';
+        echo '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('Tariffs path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_tariffs" placeholder="tariffs" /></label>';
+        echo '<label>' . esc_html__('Source path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_source" placeholder="source" /></label>';
+        echo '<label>' . esc_html__('FTA path', 'woocommerce-us-duties') . ' <input type="text" name="map_json_fta" placeholder="fta_flags" /></label>';
+        echo '</p>';
+        echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same HS code, country, and date', 'woocommerce-us-duties') . '</label></p>';
+        echo '<p><label>' . esc_html__('Notes (optional)', 'woocommerce-us-duties') . '<br /><input type="text" name="notes" class="regular-text" placeholder="Imported duties file" /></label></p>';
+        submit_button(__('Import Duties JSON', 'woocommerce-us-duties'), 'primary', '', false);
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Assign Customs to Products (CSV)', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Upload a CSV with columns for product ID/SKU, HS code, country code, and optionally description. HS code + country is preferred.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('wrd_products_import', 'wrd_products_import_nonce');
         echo '<p><input type="file" name="wrd_products_csv" accept=".csv" required /></p>';
         echo '<p><label><input type="checkbox" name="dry_run" value="1" checked /> ' . esc_html__('Dry run only (no changes)', 'woocommerce-us-duties') . '</label></p>';
-        echo '<p><strong>' . esc_html__('Header Mapping (optional)', 'woocommerce-us-duties') . '</strong><br/>';
-        echo esc_html__('Leave blank to autodetect common names like product_id, sku, hs_code, country_code, customs_description.', 'woocommerce-us-duties') . '</p>';
-        echo '<p>';
-        echo '<label>' . esc_html__('Product Identifier Header', 'woocommerce-us-duties') . ' <input type="text" name="map_identifier" placeholder="product_id or sku" /></label> ';
+        echo '<p class="wrd-import-form-note"><strong>' . esc_html__('Header Mapping (optional)', 'woocommerce-us-duties') . '</strong><br />' . esc_html__('Leave blank to autodetect common names like product_id, sku, hs_code, country_code, customs_description.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('Product Identifier Header', 'woocommerce-us-duties') . ' <input type="text" name="map_identifier" placeholder="product_id or sku" /></label>';
         echo '<label>' . esc_html__('Identifier Type', 'woocommerce-us-duties') . ' <select name="identifier_type"><option value="auto">' . esc_html__('Auto', 'woocommerce-us-duties') . '</option><option value="id">' . esc_html__('Product ID', 'woocommerce-us-duties') . '</option><option value="sku">' . esc_html__('SKU', 'woocommerce-us-duties') . '</option></select></label>';
         echo '</p>';
-        echo '<p>';
-        echo '<label>' . esc_html__('HS Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_hs" placeholder="hs_code" /></label> ';
-        echo '<label>' . esc_html__('Country Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_cc" placeholder="country_code" /></label> ';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('HS Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_hs" placeholder="hs_code" /></label>';
+        echo '<label>' . esc_html__('Country Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_cc" placeholder="country_code" /></label>';
         echo '<label>' . esc_html__('Description Header', 'woocommerce-us-duties') . ' <input type="text" name="map_desc" placeholder="customs_description" /></label>';
         echo '</p>';
-        submit_button(__('Import Products CSV', 'woocommerce-us-duties'));
+        submit_button(__('Import Products CSV', 'woocommerce-us-duties'), 'primary', '', false);
         echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Data Cleanup & Migration', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Safe maintenance actions for duplicate profiles and missing HS code population.', 'woocommerce-us-duties') . '</p>';
+
+        echo '<h3 style="margin-top:0;">' . esc_html__('Cleanup Duplicate Profiles', 'woocommerce-us-duties') . '</h3>';
+        echo '<p class="wrd-import-form-note">' . esc_html__('Merge duplicate profiles with the same HS code and country code. Product assignments are moved to the canonical profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post">';
+        wp_nonce_field('wrd_cleanup_duplicates', 'wrd_cleanup_nonce');
+        echo '<p><label><input type="checkbox" name="cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Find & Merge Duplicates', 'woocommerce-us-duties'), 'secondary', '', false);
+        echo '</form>';
+
+        echo '<hr />';
+        echo '<h3>' . esc_html__('Migrate Products to HS Codes', 'woocommerce-us-duties') . '</h3>';
+        echo '<p class="wrd-import-form-note">' . esc_html__('For products missing HS codes, match profile by description + country and populate HS code from the profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post">';
+        wp_nonce_field('wrd_migrate_hs', 'wrd_migrate_hs_nonce');
+        echo '<p><label><input type="checkbox" name="migrate_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
+        echo '<p class="wrd-import-form-row"><label>' . esc_html__('Limit', 'woocommerce-us-duties') . ' <input type="number" name="migrate_limit" value="100" min="1" max="10000" /> ' . esc_html__('products', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Migrate HS Codes', 'woocommerce-us-duties'), 'secondary', '', false);
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '</div>';
     }
 
     private function render_tab_tools(): void {
-        echo '<h2>' . esc_html__('Reindex Products (normalized meta)', 'woocommerce-us-duties') . '</h2>';
-        echo '<p>' . esc_html__('Rebuilds normalized description and origin for products and variations so impacted-product counts are accurate. Safe to run multiple times.', 'woocommerce-us-duties') . '</p>';
-        echo '<form method="post">';
-        wp_nonce_field('wrd_reindex', 'wrd_reindex_nonce');
-        echo '<p><label>Max items <input type="number" name="max" value="1000" min="100" step="100" /></label> ';
-        submit_button(__('Run Reindex', 'woocommerce-us-duties'), 'secondary', '', false);
-        echo '</p></form>';
+        $notices = [];
 
-        if (!empty($_POST['wrd_reindex_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_reindex_nonce'])), 'wrd_reindex')) {
-            $processed = $this->reindex_products((int)($_POST['max'] ?? 1000));
-            echo '<div class="updated"><p>' . esc_html(sprintf(__('Reindexed %d items.', 'woocommerce-us-duties'), $processed)) . '</p></div>';
+        if (!empty($_POST['wrd_cleanup_unused_profiles_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_cleanup_unused_profiles_nonce'])), 'wrd_cleanup_unused_profiles')) {
+            $unused_summary = $this->handle_unused_profile_cleanup();
+            if (is_array($unused_summary)) {
+                $message = sprintf(
+                    __('Unused profile cleanup: %1$d found, %2$d deleted. (dry-run: %3$s)', 'woocommerce-us-duties'),
+                    (int) ($unused_summary['unused_found'] ?? 0),
+                    (int) ($unused_summary['profiles_deleted'] ?? 0),
+                    !empty($unused_summary['dry_run']) ? 'yes' : 'no'
+                );
+                $notices[] = [
+                    'class' => 'notice notice-success',
+                    'message' => $message,
+                    'details' => !empty($unused_summary['messages']) ? implode("\n", (array) $unused_summary['messages']) : '',
+                ];
+            }
         }
 
-        echo '<h2>' . esc_html__('FX Tools', 'woocommerce-us-duties') . '</h2>';
-        echo '<form method="post">';
-        wp_nonce_field('wrd_fx_tools', 'wrd_fx_tools_nonce');
-        echo '<p>';
-        submit_button(__('Refresh FX Rates Cache', 'woocommerce-us-duties'), 'secondary', 'wrd_fx_refresh', false);
-        echo '</p></form>';
+        if (!empty($_POST['wrd_reindex_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_reindex_nonce'])), 'wrd_reindex')) {
+            $processed = $this->reindex_products((int) ($_POST['max'] ?? 1000));
+            $notices[] = [
+                'class' => 'notice notice-success',
+                'message' => sprintf(__('Reindexed %d items.', 'woocommerce-us-duties'), $processed),
+                'details' => '',
+            ];
+        }
+
         if (!empty($_POST['wrd_fx_tools_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_fx_tools_nonce'])), 'wrd_fx_tools')) {
             if (!empty($_POST['wrd_fx_refresh'])) {
                 delete_transient('wrd_fx_rates_exchangerate_host_USD');
                 WRD_FX::get_rates_table('USD');
-                echo '<div class="updated"><p>' . esc_html__('FX rates refreshed.', 'woocommerce-us-duties') . '</p></div>';
+                $notices[] = [
+                    'class' => 'notice notice-success',
+                    'message' => __('FX rates refreshed.', 'woocommerce-us-duties'),
+                    'details' => '',
+                ];
             }
         }
+
+        echo '<style>
+            .wrd-tools-intro {
+                margin: 12px 0 16px;
+                color: #50575e;
+                max-width: 980px;
+            }
+            .wrd-tools-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 14px;
+                align-items: start;
+            }
+            .wrd-tools-grid .postbox {
+                margin: 0;
+            }
+            .wrd-tools-grid .postbox .hndle {
+                padding: 12px 14px;
+                border-bottom: 1px solid #e2e4e7;
+            }
+            .wrd-tools-grid .postbox .inside {
+                margin: 0;
+                padding: 14px;
+            }
+            .wrd-tools-grid .inside p.description {
+                margin-top: 0;
+                margin-bottom: 12px;
+                color: #646970;
+            }
+            .wrd-tool-option {
+                margin: 0 0 10px;
+            }
+            .wrd-tool-inline {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+            }
+            .wrd-tool-inline label {
+                margin: 0;
+            }
+            .wrd-tool-inline input[type="number"] {
+                width: 96px;
+            }
+            .wrd-tools-grid .button {
+                margin: 0;
+            }
+            .wrd-tools-notice .details {
+                margin-top: 8px;
+            }
+            .wrd-tools-notice pre {
+                background: #fff;
+                border: 1px solid #dcdcde;
+                padding: 8px;
+                max-height: 280px;
+                overflow: auto;
+                margin: 8px 0 0;
+            }
+        </style>';
+
+        echo '<p class="wrd-tools-intro">' . esc_html__('Maintenance and diagnostic actions for profiles, product metadata, and exchange-rate caching. Use dry-run mode first for destructive operations.', 'woocommerce-us-duties') . '</p>';
+
+        foreach ($notices as $notice) {
+            echo '<div class="' . esc_attr($notice['class']) . ' wrd-tools-notice"><p>' . esc_html($notice['message']) . '</p>';
+            if (!empty($notice['details'])) {
+                echo '<details class="details"><summary>' . esc_html__('Details', 'woocommerce-us-duties') . '</summary><pre>' . esc_html($notice['details']) . '</pre></details>';
+            }
+            echo '</div>';
+        }
+
+        echo '<div class="wrd-tools-grid">';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Profile Maintenance', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Remove profiles that are not directly linked to any active product or variation.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post">';
+        wp_nonce_field('wrd_cleanup_unused_profiles', 'wrd_cleanup_unused_profiles_nonce');
+        echo '<p class="wrd-tool-option"><label><input type="checkbox" name="unused_cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
+        echo '<p class="wrd-tool-option"><label><input type="checkbox" name="unused_cleanup_include_inactive" value="1" /> ' . esc_html__('Include inactive profiles', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Find & Delete Unused Profiles', 'woocommerce-us-duties'), 'secondary', '', false);
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('Product Metadata', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Rebuild normalized customs metadata used for matching, status calculations, and impacted-product counts.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post">';
+        wp_nonce_field('wrd_reindex', 'wrd_reindex_nonce');
+        echo '<p class="wrd-tool-inline"><label for="wrd-tools-max">' . esc_html__('Max items', 'woocommerce-us-duties') . '</label> <input id="wrd-tools-max" type="number" name="max" value="1000" min="100" step="100" /></p>';
+        submit_button(__('Run Reindex', 'woocommerce-us-duties'), 'secondary', '', false);
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="postbox">';
+        echo '<h2 class="hndle"><span>' . esc_html__('FX Cache', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<div class="inside">';
+        echo '<p class="description">' . esc_html__('Clear and repopulate the USD exchange-rate cache used by duty calculations.', 'woocommerce-us-duties') . '</p>';
+        echo '<form method="post">';
+        wp_nonce_field('wrd_fx_tools', 'wrd_fx_tools_nonce');
+        submit_button(__('Refresh FX Rates Cache', 'woocommerce-us-duties'), 'secondary', 'wrd_fx_refresh', false);
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '</div>';
+    }
+
+    private function handle_unused_profile_cleanup(): array {
+        $dry_run = !empty($_POST['unused_cleanup_dry_run']);
+        $include_inactive = !empty($_POST['unused_cleanup_include_inactive']);
+        global $wpdb;
+
+        $table = WRD_DB::table_profiles();
+        $today = current_time('Y-m-d');
+        $status_clause = $include_inactive ? '' : $wpdb->prepare(' AND (p.effective_to IS NULL OR p.effective_to >= %s) ', $today);
+
+        $sql = "
+            SELECT p.id
+            FROM {$table} p
+            LEFT JOIN (
+                SELECT DISTINCT CAST(pm.meta_value AS UNSIGNED) AS profile_id
+                FROM {$wpdb->postmeta} pm
+                INNER JOIN {$wpdb->posts} posts ON posts.ID = pm.post_id
+                WHERE pm.meta_key = '_wrd_profile_id'
+                  AND pm.meta_value REGEXP '^[0-9]+$'
+                  AND posts.post_type IN ('product', 'product_variation')
+                  AND posts.post_status NOT IN ('trash', 'auto-draft')
+            ) used_profiles ON used_profiles.profile_id = p.id
+            WHERE used_profiles.profile_id IS NULL
+            {$status_clause}
+            ORDER BY p.id ASC
+        ";
+
+        $unused_ids = array_map('intval', (array) $wpdb->get_col($sql));
+        $found_count = count($unused_ids);
+
+        $summary = [
+            'unused_found' => $found_count,
+            'profiles_deleted' => 0,
+            'dry_run' => $dry_run,
+            'messages' => [],
+        ];
+
+        if ($found_count === 0) {
+            $summary['messages'][] = 'No unused profiles found.';
+            return $summary;
+        }
+
+        $summary['messages'][] = sprintf(
+            'Found %d unused profile(s): %s',
+            $found_count,
+            implode(', ', $unused_ids)
+        );
+
+        if ($dry_run) {
+            $summary['profiles_deleted'] = $found_count;
+            $summary['messages'][] = '';
+            $summary['messages'][] = 'DRY RUN - No changes made. Uncheck "Dry run" to apply changes.';
+            return $summary;
+        }
+
+        $placeholders = implode(',', array_fill(0, $found_count, '%d'));
+        $delete_sql = $wpdb->prepare("DELETE FROM {$table} WHERE id IN ({$placeholders})", $unused_ids);
+        $deleted = (int) $wpdb->query($delete_sql);
+
+        $summary['profiles_deleted'] = $deleted;
+        $summary['messages'][] = sprintf('Deleted %d profile(s).', $deleted);
+
+        return $summary;
     }
 
     // --- Products list column: Customs status ---
     public function add_product_customs_column($columns) {
-        $new = [];
-        foreach ($columns as $key => $label) {
-            $new[$key] = $label;
-            if ($key === 'sku') {
-                $new['wrd_customs'] = __('Customs (HS)', 'wrd-us-duty');
+        if ($this->is_hs_manager_catalog_mode()) {
+            return [
+                'cb' => isset($columns['cb']) ? $columns['cb'] : '<input type="checkbox" />',
+                'title' => __('Product', 'woocommerce-us-duties'),
+                'wrd_hs_sku' => __('SKU', 'woocommerce-us-duties'),
+                'wrd_hs_source' => __('Source', 'woocommerce-us-duties'),
+                'wrd_hs_code' => __('HS Code', 'woocommerce-us-duties'),
+                'wrd_hs_origin' => __('Origin', 'woocommerce-us-duties'),
+                'wrd_hs_profile' => __('Profile', 'woocommerce-us-duties'),
+                'wrd_hs_status' => __('Status', 'woocommerce-us-duties'),
+            ];
+        }
+
+        // Main product table: do not inject the legacy customs column.
+        if (isset($columns['wrd_customs'])) {
+            unset($columns['wrd_customs']);
+        }
+        return $columns;
+    }
+
+    public function add_product_customs_sortable_column($columns) {
+        if ($this->is_hs_manager_catalog_mode()) {
+            $columns['wrd_hs_sku'] = 'sku';
+            $columns['wrd_hs_status'] = 'wrd_status';
+            return $columns;
+        }
+        if (isset($columns['wrd_customs'])) {
+            unset($columns['wrd_customs']);
+        }
+        return $columns;
+    }
+
+    public function filter_product_views($views) {
+        if (!current_user_can('edit_products')) { return $views; }
+
+        $is_hs_manager = $this->is_hs_manager_catalog_mode();
+        $hs_manager_url = add_query_arg(
+            [
+                'post_type' => 'product',
+                self::PRODUCT_CATALOG_MODE_QUERY_VAR => self::PRODUCT_CATALOG_MODE_HS_MANAGER,
+            ],
+            admin_url('edit.php')
+        );
+        $views['wrd_hs_manager'] = sprintf(
+            '<a href="%s" class="%s">%s</a>',
+            esc_url($hs_manager_url),
+            $is_hs_manager ? 'current' : '',
+            esc_html__('HS Manager', 'woocommerce-us-duties')
+        );
+
+        return $views;
+    }
+
+    public function render_product_status_filter($post_type): void {
+        if ($post_type !== 'product' || !current_user_can('edit_products')) { return; }
+
+        if ($this->is_hs_manager_catalog_mode()) {
+            echo '<input type="hidden" name="' . esc_attr(self::PRODUCT_CATALOG_MODE_QUERY_VAR) . '" value="' . esc_attr(self::PRODUCT_CATALOG_MODE_HS_MANAGER) . '" />';
+        }
+
+        $selected = $this->get_selected_customs_filter_status();
+        $labels = $this->get_product_customs_status_labels();
+
+        echo '<label class="screen-reader-text" for="wrd-customs-status-filter">' . esc_html__('Filter by customs status', 'woocommerce-us-duties') . '</label>';
+        echo '<select id="wrd-customs-status-filter" name="' . esc_attr(self::PRODUCT_CUSTOMS_FILTER_QUERY_VAR) . '">';
+        echo '<option value="">' . esc_html__('Customs status: Any', 'woocommerce-us-duties') . '</option>';
+        foreach (self::PRODUCT_CUSTOMS_STATUSES as $status) {
+            $label = isset($labels[$status]) ? $labels[$status] : ucfirst(str_replace('_', ' ', $status));
+            printf(
+                '<option value="%s" %s>%s</option>',
+                esc_attr($status),
+                selected($selected, $status, false),
+                esc_html($label)
+            );
+        }
+        echo '</select>';
+    }
+
+    public function apply_product_status_filters($query): void {
+        if (!is_admin() || !$query instanceof WP_Query || !$query->is_main_query()) { return; }
+        global $pagenow;
+        if ($pagenow !== 'edit.php') { return; }
+        if ($query->get('post_type') !== 'product') { return; }
+
+        $status = $this->get_active_customs_status();
+        if ($status !== '') {
+            $meta_query = $query->get('meta_query');
+            if (!is_array($meta_query)) { $meta_query = []; }
+            $meta_query[] = $this->build_meta_query_for_customs_status($status);
+            $query->set('meta_query', $meta_query);
+        }
+
+        $orderby = (string) $query->get('orderby');
+        if ($orderby === 'wrd_customs' || $orderby === 'wrd_status') {
+            $query->set('meta_key', '_wrd_customs_status_rank');
+            $query->set('orderby', 'meta_value_num');
+            if (!$query->get('order')) {
+                $query->set('order', 'ASC');
             }
         }
-        if (!isset($new['wrd_customs'])) {
-            $new['wrd_customs'] = __('Customs (HS)', 'wrd-us-duty');
-        }
-        return $new;
+    }
+
+    public function render_hs_manager_catalog_notice(): void {
+        if (!$this->is_hs_manager_catalog_mode()) { return; }
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || $screen->id !== 'edit-product') { return; }
+        if (!current_user_can('edit_products')) { return; }
+
+        echo '<div class="notice notice-info is-dismissible wrd-hs-manager-notice"><p>';
+        echo esc_html__('HS Manager mode: edit HS/origin inline and use the Profile pencil to search/apply profile matches per row.', 'woocommerce-us-duties');
+        echo '</p></div>';
+    }
+
+    public function render_hs_manager_catalog_styles(): void {
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || $screen->id !== 'edit-product') { return; }
+        $is_hs_manager = $this->is_hs_manager_catalog_mode();
+        ?>
+        <style>
+            #bulk-edit .wrd-customs-fields {
+                border-left: 1px solid #dcdcde;
+                padding-left: 14px;
+            }
+
+            #bulk-edit .wrd-customs-fields h4 {
+                margin: 0 0 8px;
+                padding-bottom: 6px;
+                border-bottom: 1px solid #e2e4e7;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel {
+                margin-top: 10px;
+                padding: 8px 10px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background: #fff;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel h4 {
+                margin: 0 0 8px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #f0f0f1;
+            }
+
+            #bulk-edit .wrd-customs-fields .wrd-bulk-section,
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .wrd-bulk-section {
+                margin-bottom: 4px;
+                padding: 4px 0;
+                background: transparent;
+                border: 0;
+                border-bottom: 1px solid #f3f4f6;
+            }
+
+            #bulk-edit .wrd-customs-fields .wrd-bulk-section-title,
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .wrd-bulk-section-title {
+                display: block;
+                margin-bottom: 2px;
+                color: #1d2327;
+                font-weight: 600;
+                font-size: 12px;
+            }
+
+            #bulk-edit .wrd-customs-fields .inline-edit-group,
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .inline-edit-group {
+                margin-bottom: 4px;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .inline-edit-group {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                width: 100%;
+                float: none;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .inline-edit-group .title {
+                flex: 0 0 132px;
+                width: 132px;
+                margin: 0;
+                line-height: 1.3;
+                font-weight: 400;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .inline-edit-group .input-text-wrap {
+                flex: 1 1 auto;
+                min-width: 0;
+                width: auto;
+                margin-left: 0;
+            }
+
+            #bulk-edit .wrd-customs-fields .inline-edit-group:last-child,
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .inline-edit-group:last-child {
+                margin-bottom: 0;
+            }
+
+            #bulk-edit .wrd-customs-fields select,
+            #bulk-edit .wrd-customs-fields input[type="text"],
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel select,
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel input[type="text"] {
+                width: 100%;
+                max-width: none;
+            }
+
+            #bulk-edit .wrd-customs-fields .wrd-bulk-safeguard,
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .wrd-bulk-safeguard {
+                margin-top: 2px;
+                border-bottom: 0;
+                padding-bottom: 0;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .wrd-bulk-safeguard .inline-edit-group {
+                margin: 0;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .wrd-bulk-safeguard .input-text-wrap {
+                width: 100%;
+                display: block;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .wrd-bulk-safeguard .title {
+                display: block;
+                flex: 0 0 auto;
+                width: auto;
+                margin-right: 10px;
+            }
+
+            #woocommerce-fields-bulk .wrd-customs-bulk-panel .description {
+                margin: 4px 0 0;
+                color: #646970;
+                font-size: 11px;
+                max-width: none;
+                clear: both;
+            }
+
+            <?php if ($is_hs_manager) : ?>
+            .fixed .column-title { width: 26%; }
+            .fixed .column-wrd_hs_sku { width: 10%; }
+            .fixed .column-wrd_hs_source { width: 11%; }
+            .fixed .column-wrd_hs_code { width: 9%; }
+            .fixed .column-wrd_hs_origin { width: 7%; }
+            .fixed .column-wrd_hs_profile { width: 22%; }
+            .fixed .column-wrd_hs_status { width: 9%; }
+
+            .wp-list-table .column-title,
+            .wp-list-table .column-title .row-title,
+            .wp-list-table .column-title strong {
+                white-space: normal;
+                word-break: normal;
+                overflow-wrap: break-word;
+                line-height: 1.35;
+            }
+
+            .wp-list-table .column-title .row-title {
+                display: inline-block;
+                min-width: 220px;
+            }
+
+            .wp-list-table .column-wrd_hs_code input.wrd-duty-hs,
+            .wp-list-table .column-wrd_hs_origin input.wrd-duty-origin,
+            .wp-list-table .column-wrd_hs_profile input.wrd-profile-lookup {
+                border-radius: 4px;
+                min-height: 30px;
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-legacy-suggest-wrap {
+                line-height: 1.3;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                position: relative;
+                flex: 0 0 auto;
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-hs-inline {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                white-space: nowrap;
+                position: relative;
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-legacy-suggest-toggle {
+                color: #646970;
+                text-decoration: none;
+                padding: 0;
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-legacy-suggest-toggle .dashicons {
+                width: 16px;
+                height: 16px;
+                font-size: 16px;
+                line-height: 1;
+                vertical-align: middle;
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-legacy-suggest-actions {
+                display: none;
+                align-items: center;
+                gap: 5px;
+                background: #f6f7f7;
+                border: 1px solid #dcdcde;
+                border-radius: 4px;
+                padding: 2px 6px;
+                position: absolute;
+                top: calc(100% + 4px);
+                right: 0;
+                z-index: 20;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-legacy-suggest-wrap.is-open .wrd-legacy-suggest-actions {
+                display: inline-flex;
+            }
+
+            .wp-list-table .column-wrd_hs_code .wrd-legacy-suggest-cancel {
+                color: #646970;
+                text-decoration: none;
+            }
+
+            .wp-list-table .column-wrd_hs_profile .wrd-duty-row-status {
+                margin-left: 8px;
+                font-size: 12px;
+                color: #646970;
+            }
+
+            .wp-list-table tr.wrd-duty-row-saved td {
+                background: #f0f8f1;
+                transition: background .3s ease;
+            }
+
+            .wp-list-table .column-wrd_hs_profile .button {
+                vertical-align: middle;
+            }
+
+            .wp-list-table .column-wrd_hs_profile .wrd-profile-editor {
+                display: none;
+                margin-left: 8px;
+            }
+
+            .wp-list-table .column-wrd_hs_profile.wrd-profile-editing .wrd-profile-view,
+            .wp-list-table .column-wrd_hs_profile.wrd-profile-editing .wrd-profile-edit-toggle {
+                display: none;
+            }
+
+            .wp-list-table .column-wrd_hs_profile.wrd-profile-editing .wrd-profile-editor {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .wp-list-table .column-wrd_hs_profile .wrd-profile-edit-toggle {
+                text-decoration: none;
+                color: #646970;
+            }
+
+            .wp-list-table .column-wrd_hs_profile .wrd-profile-edit-toggle .dashicons {
+                font-size: 18px;
+                line-height: 1;
+                width: 18px;
+                height: 18px;
+                vertical-align: middle;
+            }
+
+            .wrd-hs-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 2px 8px;
+                border-radius: 999px;
+                font-size: 11px;
+                line-height: 1.6;
+                border: 1px solid transparent;
+                white-space: nowrap;
+            }
+
+            .wrd-hs-pill--ok { background: #edf7ed; color: #0f5132; border-color: #b7dfc0; }
+            .wrd-hs-pill--warn { background: #fff8e5; color: #8a4b00; border-color: #ffd08a; }
+            .wrd-hs-pill--legacy { background: #f6f0ff; color: #5b2f9d; border-color: #d9c6ff; }
+            .wrd-hs-pill--error { background: #fff1f0; color: #b42318; border-color: #ffc9c5; }
+            .wrd-hs-pill--info { background: #eef6ff; color: #004e98; border-color: #bddbff; }
+            .wrd-hs-pill--neutral { background: #f6f7f7; color: #3c434a; border-color: #dcdcde; }
+            .wrd-hs-pill--muted { background: #f7f7f7; color: #646970; border-color: #e2e4e7; }
+            <?php endif; ?>
+        </style>
+        <?php
     }
 
     public function render_product_customs_column($column, $post_id) {
+        if ($this->is_hs_manager_catalog_mode()) {
+            $this->render_hs_manager_column($column, (int) $post_id);
+            return;
+        }
+
         if ($column !== 'wrd_customs') { return; }
 
-        // Get HS code and country from product
-        $hs_code = trim((string) get_post_meta($post_id, '_hs_code', true));
-        $origin = strtoupper(trim((string) get_post_meta($post_id, '_country_of_origin', true)));
-
-        // For legacy products, also check description
-        $desc = get_post_meta($post_id, '_customs_description', true);
-
-        // Check variations for variable products
-        $post_type = get_post_type($post_id);
-        if ($post_type === 'product' && !$hs_code && !$origin) {
-            $children = get_children([
-                'post_parent' => (int) $post_id,
-                'post_type' => 'product_variation',
-                'post_status' => 'any',
-                'fields' => 'ids',
-                'posts_per_page' => 1,
-            ]);
-            if ($children) {
-                $vid = $children[0];
-                $hs_code = trim((string) get_post_meta($vid, '_hs_code', true));
-                $origin = strtoupper(trim((string) get_post_meta($vid, '_country_of_origin', true)));
-                $desc = get_post_meta($vid, '_customs_description', true);
-            }
+        $hs_code = trim((string) get_post_meta($post_id, '_wrd_hs_code', true));
+        if ($hs_code === '') {
+            $hs_code = trim((string) get_post_meta($post_id, '_hs_code', true));
         }
 
-        // Display logic
-        if ($hs_code && $origin) {
-            // Has HS code + country - check if profile exists
-            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
-            if ($profile) {
-                echo '<span style="color:#008a00;font-weight:500;">' . esc_html($hs_code) . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
+        $origin = strtoupper(trim((string) get_post_meta($post_id, '_wrd_origin_cc', true)));
+        if ($origin === '') {
+            $origin = strtoupper(trim((string) get_post_meta($post_id, '_country_of_origin', true)));
+        }
+
+        $desc_norm = trim((string) get_post_meta($post_id, '_wrd_desc_norm', true));
+        if ($desc_norm === '') {
+            $desc_raw = (string) get_post_meta($post_id, '_customs_description', true);
+            $desc_norm = $desc_raw !== '' ? WRD_DB::normalize_description($desc_raw) : '';
+        }
+
+        $profile_id = (int) get_post_meta($post_id, '_wrd_profile_id', true);
+        $status = sanitize_key((string) get_post_meta($post_id, '_wrd_customs_status', true));
+        if (!in_array($status, self::PRODUCT_CUSTOMS_STATUSES, true)) {
+            $status = self::resolve_customs_status($hs_code, $origin, $desc_norm, $profile_id);
+        }
+
+        if ($status === 'ready') {
+            echo '<span class="wrd-customs-badge wrd-customs-status-ready" data-status="ready" style="color:#008a00;font-weight:500;">' . esc_html($hs_code) . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
+            return;
+        }
+
+        if ($status === 'missing_profile') {
+            echo '<span class="wrd-customs-badge wrd-customs-status-missing-profile" data-status="missing-profile" style="color:#d98300;font-weight:500;">' . esc_html($hs_code) . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
+            echo '<br><span style="color:#d98300;font-size:11px;">' . esc_html__('No profile', 'woocommerce-us-duties') . '</span>';
+            return;
+        }
+
+        if ($status === 'legacy') {
+            echo '<span class="wrd-customs-badge wrd-customs-status-legacy" data-status="legacy" style="color:#d98300;">' . esc_html__('Legacy', 'woocommerce-us-duties') . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
+            echo '<br><span style="color:#999;font-size:11px;">' . esc_html__('Needs migration', 'woocommerce-us-duties') . '</span>';
+            return;
+        }
+
+        if ($status === 'needs_origin') {
+            echo '<span class="wrd-customs-badge wrd-customs-status-needs-origin" data-status="needs-origin" style="color:#a00;">' . esc_html__('Missing origin', 'woocommerce-us-duties') . '</span>';
+            if ($hs_code !== '') {
+                echo ' <span style="color:#666;">(' . esc_html($hs_code) . ')</span>';
+            }
+            return;
+        }
+
+        if ($origin !== '') {
+            echo '<span class="wrd-customs-badge wrd-customs-status-needs-hs" data-status="needs-hs" style="color:#a00;">' . esc_html__('Missing HS', 'woocommerce-us-duties') . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
+            return;
+        }
+
+        echo '<span class="wrd-customs-badge wrd-customs-status-needs-hs" data-status="needs-hs" style="color:#a00;">' . esc_html__('Missing', 'woocommerce-us-duties') . '</span>';
+    }
+
+    private function render_hs_manager_column(string $column, int $post_id): void {
+        $ctx = $this->get_hs_manager_row_context($post_id);
+        if (!$ctx) { return; }
+
+        if ($column === 'wrd_hs_sku') {
+            echo esc_html($ctx['sku']);
+            return;
+        }
+
+        if ($column === 'wrd_hs_source') {
+            echo wp_kses_post($ctx['source_html']);
+            return;
+        }
+
+        if ($column === 'wrd_hs_code') {
+            echo '<span class="wrd-hs-inline">';
+            printf(
+                '<input type="text" class="wrd-duty-hs" value="%s" placeholder="%s" style="width:140px;" />',
+                esc_attr($ctx['local_hs']),
+                esc_attr($ctx['effective_hs'])
+            );
+            if (!empty($ctx['legacy_suggested_hs']) && $ctx['status'] === 'legacy') {
+                echo '<div class="wrd-legacy-suggest-wrap">';
+                echo '<button type="button" class="button-link wrd-legacy-suggest-toggle" title="' . esc_attr(sprintf(__('Suggested HS: %s', 'woocommerce-us-duties'), (string) $ctx['legacy_suggested_hs'])) . '" aria-label="' . esc_attr__('Show suggested HS', 'woocommerce-us-duties') . '"><span class="dashicons dashicons-lightbulb"></span></button>';
+                echo '<span class="wrd-legacy-suggest-actions">';
+                echo '<code>' . esc_html((string) $ctx['legacy_suggested_hs']) . '</code> ';
+                echo '<button type="button" class="button-link wrd-apply-suggested-hs" data-hs="' . esc_attr((string) $ctx['legacy_suggested_hs']) . '" data-origin="' . esc_attr((string) $ctx['effective_origin']) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button> ';
+                echo '<button type="button" class="button-link wrd-legacy-suggest-cancel" aria-label="' . esc_attr__('Hide suggestion', 'woocommerce-us-duties') . '">×</button>';
+                echo '</span>';
+                echo '</div>';
+            }
+            echo '</span>';
+            return;
+        }
+
+        if ($column === 'wrd_hs_origin') {
+            printf(
+                '<input type="text" class="wrd-duty-origin" maxlength="2" value="%s" placeholder="%s" style="width:72px; text-transform:uppercase;" />',
+                esc_attr($ctx['local_origin']),
+                esc_attr($ctx['effective_origin'])
+            );
+            return;
+        }
+
+        if ($column === 'wrd_hs_profile') {
+            $edit_btn = '<button type="button" class="button-link wrd-profile-edit-toggle" aria-label="' . esc_attr__('Edit profile assignment', 'woocommerce-us-duties') . '"><span class="dashicons dashicons-edit"></span></button>';
+            $profile_editor = '<span class="wrd-profile-editor">';
+            $profile_editor .= '<input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search profile…', 'woocommerce-us-duties') . '" />';
+            $profile_editor .= ' <button type="button" class="button button-small button-primary wrd-duty-save" data-product-id="' . esc_attr((string) $post_id) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>';
+            $profile_editor .= ' <button type="button" class="button button-small wrd-profile-edit-cancel">' . esc_html__('Cancel', 'woocommerce-us-duties') . '</button>';
+            $profile_editor .= '</span>';
+
+            if ($ctx['profile_id'] > 0) {
+                echo '<span class="wrd-hs-pill wrd-hs-pill--ok wrd-profile-view">' . esc_html(sprintf(__('Linked #%d', 'woocommerce-us-duties'), (int) $ctx['profile_id'])) . '</span> ' . $edit_btn . ' ' . $profile_editor;
             } else {
-                echo '<span style="color:#d98300;font-weight:500;">' . esc_html($hs_code) . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
-                echo '<br><span style="color:#d98300;font-size:11px;">' . esc_html__('No profile', 'wrd-us-duty') . '</span>';
+                echo '<span class="wrd-hs-pill wrd-hs-pill--warn wrd-profile-view">' . esc_html__('No profile', 'woocommerce-us-duties') . '</span> ' . $edit_btn . ' ' . $profile_editor;
             }
-        } elseif ($desc && $origin) {
-            // Legacy: has description + country but no HS code
-            echo '<span style="color:#d98300;">' . esc_html__('Legacy', 'wrd-us-duty') . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
-            echo '<br><span style="color:#999;font-size:11px;">' . esc_html__('Needs migration', 'wrd-us-duty') . '</span>';
-        } elseif ($origin) {
-            // Has country but missing HS code
-            echo '<span style="color:#a00;">' . esc_html__('Missing HS', 'wrd-us-duty') . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
-        } else {
-            // Missing everything
-            echo '<span style="color:#a00;">' . esc_html__('Missing', 'wrd-us-duty') . '</span>';
+            echo '<span class="wrd-duty-row-status"></span>';
+            return;
         }
+
+        if ($column === 'wrd_hs_status') {
+            echo wp_kses_post($this->render_hs_manager_status_html($ctx['status']));
+            return;
+        }
+
+    }
+
+    private function get_hs_manager_row_context(int $post_id): ?array {
+        static $cache = [];
+        if (isset($cache[$post_id])) { return $cache[$post_id]; }
+
+        $product = wc_get_product($post_id);
+        if (!$product) {
+            $cache[$post_id] = null;
+            return null;
+        }
+
+        $effective = WRD_Category_Settings::get_effective_hs_code($product);
+        $local_hs = trim((string) $product->get_meta('_hs_code', true));
+        $local_origin = strtoupper(trim((string) $product->get_meta('_country_of_origin', true)));
+        $effective_hs = trim((string) ($effective['hs_code'] ?? ''));
+        $effective_origin = strtoupper(trim((string) ($effective['origin'] ?? '')));
+        $effective_desc = $this->get_effective_customs_description($product);
+        $source = (string) ($effective['source'] ?? 'none');
+        $source_html = $this->format_hs_manager_source($source, $product);
+        $status = sanitize_key((string) get_post_meta($post_id, '_wrd_customs_status', true));
+        $profile_id = (int) get_post_meta($post_id, '_wrd_profile_id', true);
+
+        if (!in_array($status, self::PRODUCT_CUSTOMS_STATUSES, true)) {
+            $desc_norm = trim((string) get_post_meta($post_id, '_wrd_desc_norm', true));
+            $status = self::resolve_customs_status($effective_hs, $effective_origin, $desc_norm, $profile_id);
+        }
+
+        $legacy_suggested_hs = '';
+        if ($status === 'legacy' && $effective_desc !== '' && $effective_origin !== '') {
+            $profile = WRD_DB::get_profile($effective_desc, $effective_origin);
+            if ($profile && !empty($profile['hs_code'])) {
+                $legacy_suggested_hs = trim((string) $profile['hs_code']);
+            }
+        }
+
+        $cache[$post_id] = [
+            'sku' => (string) $product->get_sku(),
+            'local_hs' => $local_hs,
+            'local_origin' => $local_origin,
+            'effective_hs' => $effective_hs,
+            'effective_origin' => $effective_origin,
+            'source' => $source,
+            'source_html' => $source_html,
+            'status' => $status,
+            'profile_id' => $profile_id,
+            'legacy_suggested_hs' => $legacy_suggested_hs,
+        ];
+
+        return $cache[$post_id];
+    }
+
+    private function render_hs_manager_status_html(string $status): string {
+        if ($status === 'ready') {
+            return '<span class="wrd-hs-pill wrd-hs-pill--ok">' . esc_html__('Ready', 'woocommerce-us-duties') . '</span>';
+        }
+        if ($status === 'missing_profile') {
+            return '<span class="wrd-hs-pill wrd-hs-pill--warn">' . esc_html__('Missing Profile', 'woocommerce-us-duties') . '</span>';
+        }
+        if ($status === 'legacy') {
+            return '<span class="wrd-hs-pill wrd-hs-pill--legacy">' . esc_html__('Legacy', 'woocommerce-us-duties') . '</span>';
+        }
+        if ($status === 'needs_origin') {
+            return '<span class="wrd-hs-pill wrd-hs-pill--error">' . esc_html__('Needs Origin', 'woocommerce-us-duties') . '</span>';
+        }
+        return '<span class="wrd-hs-pill wrd-hs-pill--error">' . esc_html__('Needs HS', 'woocommerce-us-duties') . '</span>';
+    }
+
+    private function format_hs_manager_source(string $source, WC_Product $product): string {
+        if (strpos($source, 'category:') === 0) {
+            $label = trim(substr($source, 9));
+            if ($label === '') {
+                $label = __('Category', 'woocommerce-us-duties');
+            }
+            return '<span class="wrd-hs-pill wrd-hs-pill--info">' . esc_html(sprintf(__('Category: %s', 'woocommerce-us-duties'), $label)) . '</span>';
+        }
+
+        if ($product->is_type('variation')) {
+            $parent = wc_get_product($product->get_parent_id());
+            if ($parent) {
+                $parent_hs = trim((string) $parent->get_meta('_hs_code', true));
+                $parent_origin = strtoupper(trim((string) $parent->get_meta('_country_of_origin', true)));
+                if ($parent_hs !== '' || $parent_origin !== '') {
+                    return '<span class="wrd-hs-pill wrd-hs-pill--info">' . esc_html__('Parent', 'woocommerce-us-duties') . '</span>';
+                }
+            }
+        }
+
+        $local_hs = trim((string) $product->get_meta('_hs_code', true));
+        $local_origin = strtoupper(trim((string) $product->get_meta('_country_of_origin', true)));
+        if ($local_hs !== '' || $local_origin !== '') {
+            return '<span class="wrd-hs-pill wrd-hs-pill--neutral">' . esc_html__('Product', 'woocommerce-us-duties') . '</span>';
+        }
+
+        return '<span class="wrd-hs-pill wrd-hs-pill--muted">' . esc_html__('None', 'woocommerce-us-duties') . '</span>';
+    }
+
+    private function get_effective_customs_description(WC_Product $product): string {
+        $desc = trim((string) $product->get_meta('_customs_description', true));
+        if ($desc !== '') {
+            return $desc;
+        }
+        if ($product->is_type('variation')) {
+            $parent = wc_get_product($product->get_parent_id());
+            if ($parent) {
+                return trim((string) $parent->get_meta('_customs_description', true));
+            }
+        }
+        return '';
+    }
+
+    private function get_selected_customs_view_status(): string {
+        if (empty($_GET[self::PRODUCT_CUSTOMS_VIEW_QUERY_VAR])) { return ''; }
+        $status = sanitize_key(wp_unslash($_GET[self::PRODUCT_CUSTOMS_VIEW_QUERY_VAR]));
+        return in_array($status, self::PRODUCT_CUSTOMS_STATUSES, true) ? $status : '';
+    }
+
+    private function get_selected_customs_filter_status(): string {
+        if (empty($_GET[self::PRODUCT_CUSTOMS_FILTER_QUERY_VAR])) { return ''; }
+        $status = sanitize_key(wp_unslash($_GET[self::PRODUCT_CUSTOMS_FILTER_QUERY_VAR]));
+        return in_array($status, self::PRODUCT_CUSTOMS_STATUSES, true) ? $status : '';
+    }
+
+    private function get_active_customs_status(): string {
+        $view_status = $this->get_selected_customs_view_status();
+        if ($view_status !== '') { return $view_status; }
+        return $this->get_selected_customs_filter_status();
+    }
+
+    private function is_hs_manager_catalog_mode(): bool {
+        if (empty($_GET[self::PRODUCT_CATALOG_MODE_QUERY_VAR])) { return false; }
+        $mode = sanitize_key(wp_unslash($_GET[self::PRODUCT_CATALOG_MODE_QUERY_VAR]));
+        return $mode === self::PRODUCT_CATALOG_MODE_HS_MANAGER;
+    }
+
+    private function get_product_customs_status_labels(): array {
+        return [
+            'needs_hs' => __('Needs HS', 'woocommerce-us-duties'),
+            'needs_origin' => __('Needs Origin', 'woocommerce-us-duties'),
+            'missing_profile' => __('Missing Profile', 'woocommerce-us-duties'),
+            'legacy' => __('Legacy', 'woocommerce-us-duties'),
+            'ready' => __('Ready', 'woocommerce-us-duties'),
+        ];
+    }
+
+    private function get_product_customs_view_counts(): array {
+        $cached = get_transient(self::PRODUCT_CUSTOMS_COUNT_CACHE_KEY);
+        if (is_array($cached)) { return $cached; }
+
+        $counts = [];
+        foreach (self::PRODUCT_CUSTOMS_STATUSES as $status) {
+            $counts[$status] = $this->count_products_by_customs_status($status);
+        }
+        set_transient(self::PRODUCT_CUSTOMS_COUNT_CACHE_KEY, $counts, 5 * MINUTE_IN_SECONDS);
+        return $counts;
+    }
+
+    private function count_products_by_customs_status(string $status): int {
+        $q = new WP_Query([
+            'post_type' => 'product',
+            'post_status' => ['publish', 'draft', 'pending', 'private', 'future'],
+            'posts_per_page' => 1,
+            'fields' => 'ids',
+            'meta_query' => [$this->build_meta_query_for_customs_status($status)],
+            'no_found_rows' => false,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+        ]);
+
+        return isset($q->found_posts) ? (int) $q->found_posts : 0;
+    }
+
+    private function build_meta_query_for_customs_status(string $status): array {
+        $hs_missing = $this->meta_missing_value_clause('_wrd_hs_code');
+        $origin_missing = $this->meta_missing_value_clause('_wrd_origin_cc');
+        $profile_missing = $this->meta_missing_value_clause('_wrd_profile_id');
+
+        $hs_present = $this->meta_has_value_clause('_wrd_hs_code');
+        $origin_present = $this->meta_has_value_clause('_wrd_origin_cc');
+        $profile_present = $this->meta_has_value_clause('_wrd_profile_id');
+        $desc_present = $this->meta_has_value_clause('_wrd_desc_norm');
+
+        if ($status === 'needs_origin') {
+            return $origin_missing;
+        }
+        if ($status === 'legacy') {
+            return [
+                'relation' => 'AND',
+                $desc_present,
+                $origin_present,
+                $hs_missing,
+            ];
+        }
+        if ($status === 'missing_profile') {
+            return [
+                'relation' => 'AND',
+                $hs_present,
+                $origin_present,
+                $profile_missing,
+            ];
+        }
+        if ($status === 'ready') {
+            return [
+                'relation' => 'AND',
+                $hs_present,
+                $origin_present,
+                $profile_present,
+            ];
+        }
+
+        return $hs_missing;
+    }
+
+    private function meta_has_value_clause(string $meta_key): array {
+        return [
+            'relation' => 'AND',
+            [
+                'key' => $meta_key,
+                'compare' => 'EXISTS',
+            ],
+            [
+                'key' => $meta_key,
+                'value' => '',
+                'compare' => '!=',
+            ],
+        ];
+    }
+
+    private function meta_missing_value_clause(string $meta_key): array {
+        return [
+            'relation' => 'OR',
+            [
+                'key' => $meta_key,
+                'compare' => 'NOT EXISTS',
+            ],
+            [
+                'key' => $meta_key,
+                'value' => '',
+                'compare' => '=',
+            ],
+        ];
+    }
+
+    private static function resolve_customs_status(string $hs_code, string $origin, string $desc_norm, int $profile_id): string {
+        $hs_code = trim($hs_code);
+        $origin = strtoupper(trim($origin));
+        $desc_norm = trim($desc_norm);
+
+        if ($hs_code === '') {
+            if ($origin !== '' && $desc_norm !== '') {
+                return 'legacy';
+            }
+            return 'needs_hs';
+        }
+
+        if ($origin === '') {
+            return 'needs_origin';
+        }
+
+        if ($profile_id > 0) {
+            return 'ready';
+        }
+
+        return 'missing_profile';
+    }
+
+    private static function resolve_customs_status_rank(string $status): int {
+        if ($status === 'needs_hs') { return 10; }
+        if ($status === 'needs_origin') { return 20; }
+        if ($status === 'legacy') { return 30; }
+        if ($status === 'missing_profile') { return 40; }
+        if ($status === 'ready') { return 50; }
+        return 99;
+    }
+
+    private static function sync_customs_status_meta(int $post_id, string $hs_code, string $origin, string $desc_norm, int $profile_id): void {
+        $status = self::resolve_customs_status($hs_code, $origin, $desc_norm, $profile_id);
+        update_post_meta($post_id, '_wrd_customs_status', $status);
+        update_post_meta($post_id, '_wrd_customs_status_rank', self::resolve_customs_status_rank($status));
+        delete_transient(self::PRODUCT_CUSTOMS_COUNT_CACHE_KEY);
     }
 
     // Add "Assign Profile" row action to products
     public function add_assign_profile_row_action($actions, $post) {
         if ($post->post_type !== 'product') {
+            return $actions;
+        }
+        if ($this->is_hs_manager_catalog_mode()) {
             return $actions;
         }
 
@@ -799,7 +1955,7 @@ class WRD_Admin {
                 $new_actions['wrd_assign_profile'] = sprintf(
                     '<a href="#" class="wrd-assign-profile-action" data-product-id="%d">%s</a>',
                     $post->ID,
-                    esc_html__('Assign Profile', 'wrd-us-duty')
+                    esc_html__('Assign Profile', 'woocommerce-us-duties')
                 );
             }
         }
@@ -818,23 +1974,23 @@ class WRD_Admin {
                 <tr id="wrd-inline-assign-row" class="inline-edit-row inline-edit-row-post quick-edit-row quick-edit-row-post inline-edit-product">
                     <td colspan="10" class="colspanchange">
                         <fieldset class="inline-edit-col-left" style="width: 100%;">
-                            <legend class="inline-edit-legend"><?php esc_html_e('Assign Profile', 'wrd-us-duty'); ?></legend>
+                            <legend class="inline-edit-legend"><?php esc_html_e('Assign Profile', 'woocommerce-us-duties'); ?></legend>
                             <div class="inline-edit-col" style="display: flex; gap: 12px; align-items: center;">
                                 <label style="flex: 1;">
-                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Profile', 'wrd-us-duty'); ?></span>
-                                    <input type="text" class="wrd-profile-lookup" placeholder="<?php esc_attr_e('Search by HS code or description...', 'wrd-us-duty'); ?>" style="width: 300px;" />
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Profile', 'woocommerce-us-duties'); ?></span>
+                                    <input type="text" class="wrd-profile-lookup" placeholder="<?php esc_attr_e('Search by HS code or description...', 'woocommerce-us-duties'); ?>" style="width: 300px;" />
                                 </label>
                                 <label>
-                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('HS Code', 'wrd-us-duty'); ?></span>
-                                    <input type="text" class="wrd-hs-code" placeholder="<?php esc_attr_e('e.g., 8206.00.0000', 'wrd-us-duty'); ?>" style="width: 140px;" />
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('HS Code', 'woocommerce-us-duties'); ?></span>
+                                    <input type="text" class="wrd-hs-code" placeholder="<?php esc_attr_e('e.g., 8206.00.0000', 'woocommerce-us-duties'); ?>" style="width: 140px;" />
                                 </label>
                                 <label>
-                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Country', 'wrd-us-duty'); ?></span>
-                                    <input type="text" class="wrd-country" placeholder="<?php esc_attr_e('CC', 'wrd-us-duty'); ?>" maxlength="2" style="width: 60px;" />
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Country', 'woocommerce-us-duties'); ?></span>
+                                    <input type="text" class="wrd-country" placeholder="<?php esc_attr_e('ISO-2', 'woocommerce-us-duties'); ?>" maxlength="2" style="width: 60px;" />
                                 </label>
                                 <div style="margin-left: auto;">
-                                    <button type="button" class="button button-primary wrd-apply-assign"><?php esc_html_e('Apply', 'wrd-us-duty'); ?></button>
-                                    <button type="button" class="button wrd-cancel-assign"><?php esc_html_e('Cancel', 'wrd-us-duty'); ?></button>
+                                    <button type="button" class="button button-primary wrd-apply-assign"><?php esc_html_e('Apply', 'woocommerce-us-duties'); ?></button>
+                                    <button type="button" class="button wrd-cancel-assign"><?php esc_html_e('Cancel', 'woocommerce-us-duties'); ?></button>
                                     <span class="spinner" style="float: none; margin: 0 0 0 8px;"></span>
                                 </div>
                             </div>
@@ -919,55 +2075,176 @@ class WRD_Admin {
     // --- Quick/Bulk edit fields and handler ---
     public function quick_bulk_edit_box($column_name, $post_type) {
         if ($post_type !== 'product') { return; }
-        static $rendered = false; if ($rendered) { return; } $rendered = true;
+        if (current_filter() === 'bulk_edit_custom_box') { return; }
+        static $rendered = [];
+        $hook = current_filter();
+        if (isset($rendered[$hook])) { return; }
+        $rendered[$hook] = true;
         // Render our fields once in the bulk/quick edit panel
         echo '<fieldset class="inline-edit-col-right wrd-customs-fields"><div class="inline-edit-col">';
-        echo '<h4>' . esc_html__('Customs', 'wrd-us-duty') . '</h4>';
+        echo '<h4>' . esc_html__('Customs', 'woocommerce-us-duties') . '</h4>';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('Profile (type to search)', 'wrd-us-duty') . '</span>';
-        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search by HS code, country, or description...', 'wrd-us-duty') . '" /></span>';
+        echo '<span class="title">' . esc_html__('Profile (type to search)', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search by HS code, country, or description...', 'woocommerce-us-duties') . '" /></span>';
         echo '</label>';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('HS Code', 'wrd-us-duty') . '</span>';
+        echo '<span class="title">' . esc_html__('HS Code', 'woocommerce-us-duties') . '</span>';
         echo '<span class="input-text-wrap"><input type="text" name="wrd_hs_code" value="" /></span>';
         echo '</label>';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('Origin (ISO-2)', 'wrd-us-duty') . '</span>';
+        echo '<span class="title">' . esc_html__('Origin (ISO-2)', 'woocommerce-us-duties') . '</span>';
         echo '<span class="input-text-wrap"><input type="text" name="wrd_country_of_origin" value="" maxlength="2" /></span>';
         echo '</label>';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('Description', 'wrd-us-duty') . '</span>';
+        echo '<span class="title">' . esc_html__('Description', 'woocommerce-us-duties') . '</span>';
         echo '<span class="input-text-wrap"><input type="text" name="wrd_customs_description" value="" /></span>';
         echo '</label>';
-        echo '<p class="description">' . esc_html__('Leave blank to keep existing values. Applies to selected items for Bulk Edit.', 'wrd-us-duty') . '</p>';
+        echo '<p class="description">' . esc_html__('Quick Edit values update only this product.', 'woocommerce-us-duties') . '</p>';
         echo '</div></fieldset>';
     }
 
     public function quick_bulk_edit_panel() {
-        // Secondary render inside WC panels for robustness (bulk editor UI)
-        echo '<div class="wrd-customs-inline" style="margin-top:8px;">';
-        echo '<strong>' . esc_html__('Customs', 'wrd-us-duty') . ':</strong> ';
-        echo '<input type="text" class="wrd-profile-lookup" style="min-width:260px" placeholder="' . esc_attr__('Search profile...', 'wrd-us-duty') . '" /> ';
-        echo '<input type="text" name="wrd_hs_code" placeholder="' . esc_attr__('HS Code', 'wrd-us-duty') . '" style="width:120px" /> ';
-        echo '<input type="text" name="wrd_country_of_origin" placeholder="' . esc_attr__('CC', 'wrd-us-duty') . '" maxlength="2" style="width:60px" /> ';
-        echo '<input type="text" name="wrd_customs_description" placeholder="' . esc_attr__('Description', 'wrd-us-duty') . '" /> ';
+        $is_bulk = current_filter() === 'woocommerce_product_bulk_edit_start';
+        if (!$is_bulk) {
+            // Keep quick edit panel lightweight.
+            echo '<div class="wrd-customs-inline" style="margin-top:8px;">';
+            echo '<strong>' . esc_html__('Customs', 'woocommerce-us-duties') . ':</strong> ';
+            echo '<input type="text" class="wrd-profile-lookup" style="min-width:260px" placeholder="' . esc_attr__('Search profile...', 'woocommerce-us-duties') . '" /> ';
+            echo '<input type="text" name="wrd_hs_code" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" style="width:120px" /> ';
+            echo '<input type="text" name="wrd_country_of_origin" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" maxlength="2" style="width:60px" /> ';
+            echo '<input type="text" name="wrd_customs_description" placeholder="' . esc_attr__('Description', 'woocommerce-us-duties') . '" /> ';
+            echo '</div>';
+            return;
+        }
+
+        // WooCommerce native bulk panel.
+        echo '<div class="wrd-customs-bulk-panel">';
+        echo '<h4>' . esc_html__('Customs Bulk Actions', 'woocommerce-us-duties') . '</h4>';
+
+        echo '<div class="wrd-bulk-section">';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Profile', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search by HS code, country, or description...', 'woocommerce-us-duties') . '" /></span>';
+        echo '</label>';
+        echo '</div>';
+
+        echo '<div class="wrd-bulk-section">';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('HS Code', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><select name="wrd_hs_action" class="wrd-bulk-action">';
+        echo '<option value="">' . esc_html__('No change', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="set">' . esc_html__('Set to value', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="clear">' . esc_html__('Clear', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="suggest">' . esc_html__('Apply suggested (legacy)', 'woocommerce-us-duties') . '</option>';
+        echo '</select></span>';
+        echo '</label>';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Value', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" name="wrd_hs_code" value="" class="wrd-bulk-value wrd-bulk-value-hs" /></span>';
+        echo '</label>';
+        echo '</div>';
+
+        echo '<div class="wrd-bulk-section">';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Origin', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><select name="wrd_origin_action" class="wrd-bulk-action">';
+        echo '<option value="">' . esc_html__('No change', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="set">' . esc_html__('Set to value', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="clear">' . esc_html__('Clear', 'woocommerce-us-duties') . '</option>';
+        echo '</select></span>';
+        echo '</label>';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Value (ISO-2)', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" name="wrd_country_of_origin" value="" maxlength="2" class="wrd-bulk-value wrd-bulk-value-origin" /></span>';
+        echo '</label>';
+        echo '</div>';
+
+        echo '<div class="wrd-bulk-section">';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Description', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><select name="wrd_desc_action" class="wrd-bulk-action">';
+        echo '<option value="">' . esc_html__('No change', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="set">' . esc_html__('Set to value', 'woocommerce-us-duties') . '</option>';
+        echo '<option value="clear">' . esc_html__('Clear', 'woocommerce-us-duties') . '</option>';
+        echo '</select></span>';
+        echo '</label>';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Value', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" name="wrd_customs_description" value="" class="wrd-bulk-value wrd-bulk-value-desc" /></span>';
+        echo '</label>';
+        echo '</div>';
+
+        echo '<div class="wrd-bulk-section wrd-bulk-safeguard">';
+        echo '<label class="inline-edit-group">';
+        echo '<span class="title">' . esc_html__('Safeguard', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="checkbox" name="wrd_only_empty" value="1" /> ' . esc_html__('Only update empty fields (safe-fill)', 'woocommerce-us-duties') . '</span>';
+        echo '</label>';
+        echo '</div>';
+        echo '<p class="description">' . esc_html__('Supports set, clear, and suggested HS actions for selected products.', 'woocommerce-us-duties') . '</p>';
         echo '</div>';
     }
 
     public function handle_quick_bulk_save($product) {
         if (!$product instanceof WC_Product) { return; }
-        // Use same fields for both quick and bulk edit
+        $is_bulk = !empty($_REQUEST['bulk_edit']);
         $hs_code = isset($_REQUEST['wrd_hs_code']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['wrd_hs_code']))) : '';
         $desc = isset($_REQUEST['wrd_customs_description']) ? wp_kses_post(wp_unslash($_REQUEST['wrd_customs_description'])) : '';
         $origin = isset($_REQUEST['wrd_country_of_origin']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['wrd_country_of_origin']))) : '';
+        $hs_action = isset($_REQUEST['wrd_hs_action']) ? sanitize_key(wp_unslash($_REQUEST['wrd_hs_action'])) : '';
+        $origin_action = isset($_REQUEST['wrd_origin_action']) ? sanitize_key(wp_unslash($_REQUEST['wrd_origin_action'])) : '';
+        $desc_action = isset($_REQUEST['wrd_desc_action']) ? sanitize_key(wp_unslash($_REQUEST['wrd_desc_action'])) : '';
+        $only_empty = !empty($_REQUEST['wrd_only_empty']);
 
         $changes = [];
-        if ($hs_code !== '') { $changes['hs_code'] = $hs_code; }
-        if ($desc !== '') { $changes['desc'] = $desc; }
-        if ($origin !== '') { $changes['origin'] = $origin; }
+        $current_hs = trim((string) $product->get_meta('_hs_code', true));
+        $current_origin = strtoupper(trim((string) $product->get_meta('_country_of_origin', true)));
+        $current_desc = trim((string) $product->get_meta('_customs_description', true));
+
+        if ($is_bulk) {
+            if ($hs_action === 'clear') {
+                $changes['hs_code'] = '';
+            } elseif ($hs_action === 'set' && $hs_code !== '' && (!$only_empty || $current_hs === '')) {
+                $changes['hs_code'] = $hs_code;
+            } elseif ($hs_action === 'suggest') {
+                $suggested_hs = $this->get_suggested_hs_for_product($product);
+                if ($suggested_hs !== '' && (!$only_empty || $current_hs === '')) {
+                    $changes['hs_code'] = $suggested_hs;
+                }
+            }
+
+            if ($origin_action === 'clear') {
+                $changes['origin'] = '';
+            } elseif ($origin_action === 'set' && $origin !== '' && (!$only_empty || $current_origin === '')) {
+                $changes['origin'] = $origin;
+            }
+
+            if ($desc_action === 'clear') {
+                $changes['desc'] = '';
+            } elseif ($desc_action === 'set' && $desc !== '' && (!$only_empty || $current_desc === '')) {
+                $changes['desc'] = $desc;
+            }
+        } else {
+            if ($hs_code !== '') { $changes['hs_code'] = $hs_code; }
+            if ($desc !== '') { $changes['desc'] = $desc; }
+            if ($origin !== '') { $changes['origin'] = $origin; }
+        }
+
         if ($changes) {
             self::upsert_product_classification((int) $product->get_id(), $changes);
         }
+    }
+
+    private function get_suggested_hs_for_product(WC_Product $product): string {
+        $effective = WRD_Category_Settings::get_effective_hs_code($product);
+        $hs = trim((string) ($effective['hs_code'] ?? ''));
+        if ($hs !== '') { return $hs; }
+        $origin = strtoupper(trim((string) ($effective['origin'] ?? '')));
+        if ($origin === '') { return ''; }
+        $desc = $this->get_effective_customs_description($product);
+        if ($desc === '') { return ''; }
+        $profile = WRD_DB::get_profile($desc, $origin);
+        if (!$profile || empty($profile['hs_code'])) { return ''; }
+        return trim((string) $profile['hs_code']);
     }
 
     public function enqueue_admin_assets($hook) {
@@ -984,7 +2261,48 @@ class WRD_Admin {
             wp_localize_script('wrd-admin-quick-bulk', 'WRDProfiles', [
                 'ajax' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('wrd_search_profiles'),
+                'i18n' => [
+                    'no_selection' => __('No products selected for bulk update.', 'woocommerce-us-duties'),
+                    'no_actions' => __('No bulk customs actions selected.', 'woocommerce-us-duties'),
+                    'preview_prefix' => __('About to update', 'woocommerce-us-duties'),
+                    'preview_suffix' => __('products with:', 'woocommerce-us-duties'),
+                    'confirm' => __('Continue?', 'woocommerce-us-duties'),
+                    'hs_set' => __('HS: set value', 'woocommerce-us-duties'),
+                    'hs_clear' => __('HS: clear', 'woocommerce-us-duties'),
+                    'hs_suggest' => __('HS: apply suggested (legacy)', 'woocommerce-us-duties'),
+                    'origin_set' => __('Origin: set value', 'woocommerce-us-duties'),
+                    'origin_clear' => __('Origin: clear', 'woocommerce-us-duties'),
+                    'desc_set' => __('Description: set value', 'woocommerce-us-duties'),
+                    'desc_clear' => __('Description: clear', 'woocommerce-us-duties'),
+                    'only_empty' => __('Only update empty fields', 'woocommerce-us-duties'),
+                ],
             ]);
+
+            if ($this->is_hs_manager_catalog_mode()) {
+                wp_enqueue_script(
+                    'wrd-admin-duty-manager',
+                    WRD_US_DUTY_URL . 'assets/admin-duty-manager.js',
+                    ['jquery', 'jquery-ui-autocomplete'],
+                    WRD_US_DUTY_VERSION,
+                    true
+                );
+                wp_localize_script('wrd-admin-duty-manager', 'WRDDutyManager', [
+                    'ajax' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('wrd_quick_assign'),
+                    'searchNonce' => wp_create_nonce('wrd_search_profiles'),
+                    'i18n' => [
+                        'missing' => __('HS and Origin are required.', 'woocommerce-us-duties'),
+                        'saving' => __('Saving...', 'woocommerce-us-duties'),
+                        'saved' => __('Saved', 'woocommerce-us-duties'),
+                        'failed' => __('Save failed', 'woocommerce-us-duties'),
+                        'linked' => __('Linked', 'woocommerce-us-duties'),
+                        'noProfile' => __('No profile', 'woocommerce-us-duties'),
+                        'ready' => __('Ready', 'woocommerce-us-duties'),
+                        'missingProfile' => __('Missing Profile', 'woocommerce-us-duties'),
+                    ],
+                ]);
+                return;
+            }
 
             // Inline assign profile
             wp_enqueue_script(
@@ -998,6 +2316,39 @@ class WRD_Admin {
                 'ajax' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('wrd_quick_assign'),
                 'searchNonce' => wp_create_nonce('wrd_search_profiles'),
+                'i18n' => [
+                    'missing_hs_country' => __('Please enter both HS code and country code.', 'woocommerce-us-duties'),
+                    'error_prefix' => __('Error:', 'woocommerce-us-duties'),
+                    'unknown_error' => __('Unknown error', 'woocommerce-us-duties'),
+                    'assign_failed' => __('Failed to assign profile. Please try again.', 'woocommerce-us-duties'),
+                ],
+            ]);
+            return;
+        }
+
+        if ($hook === 'woocommerce_page_wrd-duty-manager') {
+            wp_enqueue_script('jquery-ui-autocomplete');
+            wp_enqueue_script(
+                'wrd-admin-duty-manager',
+                WRD_US_DUTY_URL . 'assets/admin-duty-manager.js',
+                ['jquery', 'jquery-ui-autocomplete'],
+                WRD_US_DUTY_VERSION,
+                true
+            );
+            wp_localize_script('wrd-admin-duty-manager', 'WRDDutyManager', [
+                'ajax' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('wrd_quick_assign'),
+                'searchNonce' => wp_create_nonce('wrd_search_profiles'),
+                'i18n' => [
+                    'missing' => __('HS and Origin are required.', 'woocommerce-us-duties'),
+                    'saving' => __('Saving...', 'woocommerce-us-duties'),
+                    'saved' => __('Saved', 'woocommerce-us-duties'),
+                    'failed' => __('Save failed', 'woocommerce-us-duties'),
+                    'linked' => __('Linked', 'woocommerce-us-duties'),
+                    'noProfile' => __('No profile', 'woocommerce-us-duties'),
+                    'ready' => __('Ready', 'woocommerce-us-duties'),
+                    'missingProfile' => __('Missing Profile', 'woocommerce-us-duties'),
+                ],
             ]);
             return;
         }
@@ -1007,20 +2358,30 @@ class WRD_Admin {
             wp_enqueue_script('jquery');
             // Reconciliation page assets
             if (isset($_GET['tab']) && $_GET['tab'] === 'reconcile') {
-                wp_enqueue_script('jquery-ui-autocomplete');
+                wp_enqueue_style(
+                    'wrd-admin-reconcile',
+                    WRD_US_DUTY_URL . 'assets/admin-reconcile.css',
+                    [],
+                    WRD_US_DUTY_VERSION
+                );
                 wp_enqueue_script(
                     'wrd-admin-reconcile',
                     WRD_US_DUTY_URL . 'assets/admin-reconcile.js',
-                    ['jquery','jquery-ui-autocomplete'],
+                    ['jquery'],
                     WRD_US_DUTY_VERSION,
                     true
                 );
                 wp_localize_script('wrd-admin-reconcile', 'WRDReconcile', [
                     'ajax' => admin_url('admin-ajax.php'),
                     'nonce' => wp_create_nonce('wrd_reconcile_nonce'),
-                    'searchNonce' => wp_create_nonce('wrd_search_profiles'),
                     'i18n' => [
-                        'applied' => __('Applied', 'woocommerce-us-duties'),
+                        'missing' => __('HS code and origin are required.', 'woocommerce-us-duties'),
+                        'invalidCountry' => __('Origin must be a 2-letter country code.', 'woocommerce-us-duties'),
+                        'saving' => __('Saving...', 'woocommerce-us-duties'),
+                        'saved' => __('Saved', 'woocommerce-us-duties'),
+                        'bulkSaving' => __('Applying to selected rows...', 'woocommerce-us-duties'),
+                        'bulkSaved' => __('Updated %d products.', 'woocommerce-us-duties'),
+                        'noSelection' => __('Select at least one row first.', 'woocommerce-us-duties'),
                         'error' => __('Error', 'woocommerce-us-duties'),
                     ],
                 ]);
@@ -1097,6 +2458,43 @@ class WRD_Admin {
             }
         }
         wp_send_json_success(['postal_rate' => $ratePostal, 'commercial_rate' => $rateComm]);
+    }
+
+    // Assign HS/origin to multiple products via AJAX (from Reconciliation UI bulk controls)
+    public function ajax_reconcile_assign_bulk() {
+        if (!current_user_can('manage_woocommerce')) { wp_send_json_error(['message' => 'forbidden'], 403); }
+        check_ajax_referer('wrd_reconcile_nonce', 'nonce');
+
+        $raw_ids = isset($_POST['product_ids']) && is_array($_POST['product_ids']) ? $_POST['product_ids'] : [];
+        $product_ids = array_values(array_unique(array_filter(array_map('intval', $raw_ids), function($id) {
+            return $id > 0;
+        })));
+        $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
+        $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+
+        if (empty($product_ids) || $hs_code === '' || $cc === '') {
+            wp_send_json_error(['message' => 'invalid_params'], 400);
+        }
+
+        $updated = 0;
+        $skipped = 0;
+        foreach ($product_ids as $pid) {
+            $product = wc_get_product($pid);
+            if (!$product) {
+                $skipped++;
+                continue;
+            }
+            self::upsert_product_classification($pid, [
+                'hs_code' => $hs_code,
+                'origin' => $cc,
+            ]);
+            $updated++;
+        }
+
+        wp_send_json_success([
+            'updated' => $updated,
+            'skipped' => $skipped,
+        ]);
     }
 
     // Suggest top N profiles for a product by HS code similarity and same origin
@@ -1248,14 +2646,27 @@ class WRD_Admin {
             return $counters;
         }
 
-        // Detect format: Zonos format has 'entries', legacy format has 'duties'
-        $is_zonos_format = isset($data['entries']) && is_array($data['entries']);
-        $duties = null;
+        $mapping = [
+            'root' => isset($_POST['map_json_root']) ? sanitize_text_field(wp_unslash($_POST['map_json_root'])) : '',
+            'description' => isset($_POST['map_json_description']) ? sanitize_text_field(wp_unslash($_POST['map_json_description'])) : 'description|zonos_customs_description|customs_description',
+            'country' => isset($_POST['map_json_country']) ? sanitize_text_field(wp_unslash($_POST['map_json_country'])) : 'origin|originCountry|country_of_origin',
+            'hs' => isset($_POST['map_json_hs']) ? sanitize_text_field(wp_unslash($_POST['map_json_hs'])) : 'hs_code|hsCode',
+            'postal_rates' => isset($_POST['map_json_postal_rates']) ? sanitize_text_field(wp_unslash($_POST['map_json_postal_rates'])) : 'postal.rates',
+            'commercial_rates' => isset($_POST['map_json_commercial_rates']) ? sanitize_text_field(wp_unslash($_POST['map_json_commercial_rates'])) : 'commercial.rates',
+            'tariffs' => isset($_POST['map_json_tariffs']) ? sanitize_text_field(wp_unslash($_POST['map_json_tariffs'])) : 'tariffs',
+            'source' => isset($_POST['map_json_source']) ? sanitize_text_field(wp_unslash($_POST['map_json_source'])) : 'source',
+            'fta' => isset($_POST['map_json_fta']) ? sanitize_text_field(wp_unslash($_POST['map_json_fta'])) : 'fta_flags',
+        ];
 
-        if ($is_zonos_format) {
+        $duties = null;
+        if ($mapping['root'] !== '') {
+            $duties = $this->get_array_path_value($data, $mapping['root']);
+        } elseif (isset($data['entries']) && is_array($data['entries'])) {
             $duties = $data['entries'];
-        } else {
-            $duties = isset($data['duties']) ? $data['duties'] : null;
+        } elseif (isset($data['duties']) && is_array($data['duties'])) {
+            $duties = $data['duties'];
+        } elseif ($this->is_list_array($data)) {
+            $duties = $data;
         }
 
         if (!is_array($duties)) {
@@ -1267,7 +2678,7 @@ class WRD_Admin {
         $effective_from = isset($_POST['effective_from']) ? sanitize_text_field(wp_unslash($_POST['effective_from'])) : date('Y-m-d');
         $replace = !empty($_POST['replace_existing']);
         $notes = isset($_POST['notes']) ? wp_kses_post(wp_unslash($_POST['notes'])) : '';
-        $sourceRaw = isset($data['source']) ? (string)$data['source'] : '';
+        $sourceRaw = (string)($this->get_first_path_value($data, $mapping['source']) ?? (isset($data['source']) ? $data['source'] : ''));
         $fileSource = $this->normalize_profile_source($sourceRaw);
         if ($notes === '') {
             $notes = $sourceRaw !== '' ? sprintf('Imported from %s duties file', sanitize_text_field($sourceRaw)) : 'Imported duties file';
@@ -1282,15 +2693,11 @@ class WRD_Admin {
                 continue;
             }
 
-            // Parse based on format
-            if ($is_zonos_format) {
-                $description = trim((string)($entry['description'] ?? ''));
-                $country = strtoupper(trim((string)($entry['origin'] ?? '')));
-                $hs = (string)($entry['hs_code'] ?? '');
-            } else {
-                $description = trim((string)($entry['description'] ?? ''));
-                $country = strtoupper(trim((string)($entry['originCountry'] ?? '')));
-                $hs = (string)($entry['hsCode'] ?? '');
+            $description = trim((string)($this->get_first_path_value($entry, $mapping['description']) ?? ''));
+            $country = strtoupper(trim((string)($this->get_first_path_value($entry, $mapping['country']) ?? '')));
+            $hs = trim((string)($this->get_first_path_value($entry, $mapping['hs']) ?? ''));
+            if ($description === '' && $hs !== '') {
+                $description = 'HS ' . $hs;
             }
 
             if ($description === '' || $country === '') {
@@ -1301,49 +2708,34 @@ class WRD_Admin {
 
             if (strlen($hs) > 20) { $hs = substr($hs, 0, 20); }
 
-            $entrySource = isset($entry['source']) ? $this->normalize_profile_source((string)$entry['source']) : $fileSource;
+            $entrySourceRaw = (string)($this->get_first_path_value($entry, $mapping['source']) ?? (isset($entry['source']) ? $entry['source'] : ''));
+            $entrySource = $entrySourceRaw !== '' ? $this->normalize_profile_source($entrySourceRaw) : $fileSource;
 
             $postal_rates = [];
             $commercial_rates = [];
-            $fta_flags = [];
+            $fta_flags = $this->parse_fta_flags($this->get_first_path_value($entry, $mapping['fta']));
 
-            if ($is_zonos_format) {
-                // Zonos format has separate postal and commercial rate objects
-                if (isset($entry['postal']['rates']) && is_array($entry['postal']['rates'])) {
-                    $postal_rates = $entry['postal']['rates'];
-                }
-                if (isset($entry['commercial']['rates']) && is_array($entry['commercial']['rates'])) {
-                    $commercial_rates = $entry['commercial']['rates'];
-                }
-            } else {
-                // Legacy format: parse tariffs array and use same rates for postal/commercial
-                $us_duty_rates = [];
-                if (isset($entry['tariffs']) && is_array($entry['tariffs'])) {
-                    foreach ($entry['tariffs'] as $tariffIndex => $tariff) {
-                        if (!is_array($tariff)) { continue; }
-                        if (!isset($tariff['rate']) || !is_numeric($tariff['rate'])) { continue; }
+            $postal_rates = $this->parse_rate_map($this->get_first_path_value($entry, $mapping['postal_rates']));
+            $commercial_rates = $this->parse_rate_map($this->get_first_path_value($entry, $mapping['commercial_rates']));
+            if (empty($postal_rates) && isset($entry['postal']['rates'])) {
+                $postal_rates = $this->parse_rate_map($entry['postal']['rates']);
+            }
+            if (empty($commercial_rates) && isset($entry['commercial']['rates'])) {
+                $commercial_rates = $this->parse_rate_map($entry['commercial']['rates']);
+            }
 
-                        $rate_value = (float)$tariff['rate'];
-                        $rate_label = isset($tariff['description']) ? (string)$tariff['description'] : '';
-                        $fallback_key = isset($tariff['code']) ? (string)$tariff['code'] : '';
-                        $rate_key_raw = $rate_label !== '' ? $rate_label : $fallback_key;
-                        $rate_key = sanitize_key($rate_key_raw);
-                        if ($rate_key === '') {
-                            $rate_key = 'rate_' . substr(md5($rate_key_raw . $tariffIndex), 0, 8);
-                        }
-                        $us_duty_rates[$rate_key] = $rate_value;
-
-                        $tariff_type = isset($tariff['type']) ? strtoupper((string)$tariff['type']) : '';
-                        $tariff_code = isset($tariff['code']) ? strtoupper((string)$tariff['code']) : '';
-                        if ($tariff_type === 'CUSMA_ELIGIBLE' || $tariff_code === 'CUSMA') {
-                            if (!in_array('CUSMA', $fta_flags, true)) {
-                                $fta_flags[] = 'CUSMA';
-                            }
-                        }
-                    }
+            $tariffs = $this->get_first_path_value($entry, $mapping['tariffs']);
+            if (!is_array($tariffs) && isset($entry['tariffs']) && is_array($entry['tariffs'])) {
+                $tariffs = $entry['tariffs'];
+            }
+            if (is_array($tariffs)) {
+                $us_duty_rates = $this->parse_tariff_rates($tariffs, $fta_flags);
+                if (empty($postal_rates)) {
+                    $postal_rates = $us_duty_rates;
                 }
-                $postal_rates = $us_duty_rates;
-                $commercial_rates = $us_duty_rates;
+                if (empty($commercial_rates)) {
+                    $commercial_rates = $us_duty_rates;
+                }
             }
 
             $us_duty_json_data = [
@@ -1397,6 +2789,137 @@ class WRD_Admin {
             return 'legacy';
         }
         return $normalized;
+    }
+
+    private function is_list_array(array $value): bool {
+        if ($value === []) { return true; }
+        return array_keys($value) === range(0, count($value) - 1);
+    }
+
+    private function parse_path_candidates(string $pathSpec): array {
+        $parts = preg_split('/[\r\n,|]+/', $pathSpec);
+        if (!is_array($parts)) { return []; }
+        $out = [];
+        foreach ($parts as $part) {
+            $path = trim((string)$part);
+            if ($path === '') { continue; }
+            $out[] = $path;
+        }
+        return array_values(array_unique($out));
+    }
+
+    private function get_array_path_value($data, string $path) {
+        $path = trim($path);
+        if ($path === '') { return $data; }
+        $normalizedPath = str_replace(['[', ']'], ['.', ''], $path);
+        $segments = array_values(array_filter(explode('.', $normalizedPath), static function ($segment) {
+            return $segment !== '';
+        }));
+        $current = $data;
+        foreach ($segments as $segment) {
+            if (!is_array($current)) {
+                return null;
+            }
+            if (array_key_exists($segment, $current)) {
+                $current = $current[$segment];
+                continue;
+            }
+            if (ctype_digit($segment)) {
+                $index = (int)$segment;
+                if (array_key_exists($index, $current)) {
+                    $current = $current[$index];
+                    continue;
+                }
+            }
+            return null;
+        }
+        return $current;
+    }
+
+    private function get_first_path_value($data, string $pathSpec) {
+        $paths = $this->parse_path_candidates($pathSpec);
+        foreach ($paths as $path) {
+            $value = $this->get_array_path_value($data, $path);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+        return null;
+    }
+
+    private function parse_rate_map($rates): array {
+        if (is_numeric($rates)) {
+            return ['duty' => (float)$rates];
+        }
+        if (!is_array($rates)) {
+            return [];
+        }
+        $normalized = [];
+        foreach ($rates as $rateKey => $rateValue) {
+            if (is_numeric($rateValue)) {
+                $key = sanitize_key((string)$rateKey);
+                if ($key === '') {
+                    $key = 'rate_' . substr(md5((string)$rateKey), 0, 8);
+                }
+                $normalized[$key] = (float)$rateValue;
+            } elseif (is_array($rateValue) && isset($rateValue['duty']) && is_numeric($rateValue['duty'])) {
+                $key = sanitize_key((string)$rateKey);
+                if ($key === '') {
+                    $key = 'rate_' . substr(md5((string)$rateKey), 0, 8);
+                }
+                $normalized[$key] = (float)$rateValue['duty'];
+            }
+        }
+        return $normalized;
+    }
+
+    private function parse_tariff_rates(array $tariffs, array &$fta_flags): array {
+        $rates = [];
+        foreach ($tariffs as $tariffIndex => $tariff) {
+            if (!is_array($tariff) || !isset($tariff['rate']) || !is_numeric($tariff['rate'])) { continue; }
+            $rate_value = (float)$tariff['rate'];
+            $rate_label = isset($tariff['description']) ? (string)$tariff['description'] : '';
+            $fallback_key = isset($tariff['code']) ? (string)$tariff['code'] : '';
+            $rate_key_raw = $rate_label !== '' ? $rate_label : $fallback_key;
+            $rate_key = sanitize_key($rate_key_raw);
+            if ($rate_key === '') {
+                $rate_key = 'rate_' . substr(md5($rate_key_raw . $tariffIndex), 0, 8);
+            }
+            $rates[$rate_key] = $rate_value;
+
+            $tariff_type = isset($tariff['type']) ? strtoupper((string)$tariff['type']) : '';
+            $tariff_code = isset($tariff['code']) ? strtoupper((string)$tariff['code']) : '';
+            if (($tariff_type === 'CUSMA_ELIGIBLE' || $tariff_code === 'CUSMA') && !in_array('CUSMA', $fta_flags, true)) {
+                $fta_flags[] = 'CUSMA';
+            }
+        }
+        return $rates;
+    }
+
+    private function parse_fta_flags($flags): array {
+        if (is_array($flags)) {
+            $out = [];
+            foreach ($flags as $flag) {
+                $flagText = strtoupper(trim((string)$flag));
+                if ($flagText !== '') {
+                    $out[] = $flagText;
+                }
+            }
+            return array_values(array_unique($out));
+        }
+        if (is_string($flags)) {
+            $parts = preg_split('/[\s,|]+/', $flags);
+            if (!is_array($parts)) { return []; }
+            $out = [];
+            foreach ($parts as $part) {
+                $flagText = strtoupper(trim((string)$part));
+                if ($flagText !== '') {
+                    $out[] = $flagText;
+                }
+            }
+            return array_values(array_unique($out));
+        }
+        return [];
     }
 
     private function handle_hs_migration(): array {
@@ -1642,7 +3165,7 @@ class WRD_Admin {
             // Support cloning via ?clone={id}
             if (!$id && isset($_GET['clone'])) { $id = (int) $_GET['clone']; }
             if ($id) { $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $id), ARRAY_A); }
-            if (!$row) { echo '<p>' . esc_html__('Profile not found.', 'wrd-us-duty') . '</p>'; return; }
+            if (!$row) { echo '<p>' . esc_html__('Profile not found.', 'woocommerce-us-duties') . '</p>'; return; }
             // If cloning, ensure ID is treated as new
             if (isset($_GET['clone'])) {
                 $row['id'] = 0;
@@ -1684,24 +3207,24 @@ class WRD_Admin {
             $postal_pref = isset($pr['base']) && is_numeric($pr['base']) ? (string)$pr['base'] : (string)(reset($pr) !== false ? reset($pr) : '');
             $comm_pref = isset($cr['base']) && is_numeric($cr['base']) ? (string)$cr['base'] : (string)(reset($cr) !== false ? reset($cr) : '');
         }
-        echo '<tr><th><label>Postal Duty Rate (%)</label></th><td><input type="number" step="0.0001" min="0" max="100" name="simple_postal_pct" value="' . esc_attr($postal_pref) . '" placeholder="e.g., 5.3" /> <span class="description">' . esc_html__('Enter as percentage (e.g., 5.3). Leave blank to manage in Advanced JSON.', 'wrd-us-duty') . '</span></td></tr>';
+        echo '<tr><th><label>Postal Duty Rate (%)</label></th><td><input type="number" step="0.0001" min="0" max="100" name="simple_postal_pct" value="' . esc_attr($postal_pref) . '" placeholder="e.g., 5.3" /> <span class="description">' . esc_html__('Enter as percentage (e.g., 5.3). Leave blank to manage in Advanced JSON.', 'woocommerce-us-duties') . '</span></td></tr>';
         echo '<tr><th><label>Commercial Duty Rate (%)</label></th><td><input type="number" step="0.0001" min="0" max="100" name="simple_commercial_pct" value="' . esc_attr($comm_pref) . '" placeholder="e.g., 7" /></td></tr>';
         $cusma_checked = in_array('CUSMA', $fta_dec_prefill, true) ? 'checked' : '';
-        echo '<tr><th><label>CUSMA</label></th><td><label><input type="checkbox" name="simple_fta_cusma" value="1" ' . $cusma_checked . ' /> ' . esc_html__('Eligible for CUSMA (duty-free into US when applicable)', 'wrd-us-duty') . '</label></td></tr>';
+        echo '<tr><th><label>CUSMA</label></th><td><label><input type="checkbox" name="simple_fta_cusma" value="1" ' . $cusma_checked . ' /> ' . esc_html__('Eligible for CUSMA (duty-free into US when applicable)', 'woocommerce-us-duties') . '</label></td></tr>';
 
         // Advanced JSON editor (collapsible)
         echo '<tr><th><label>Advanced JSON</label></th><td>';
-        echo '<details><summary>' . esc_html__('Edit raw US Duty JSON and FTA Flags', 'wrd-us-duty') . '</summary>';
+        echo '<details><summary>' . esc_html__('Edit raw US Duty JSON and FTA Flags', 'woocommerce-us-duties') . '</summary>';
         echo '<p><label>FTA Flags (JSON array)</label><br/><textarea name="fta_flags" rows="2" class="large-text code">' . esc_textarea($vals['fta_flags']) . '</textarea></p>';
         echo '<p><label>US Duty JSON</label><br/><textarea name="us_duty_json" rows="8" class="large-text code">' . esc_textarea($vals['us_duty_json']) . '</textarea></p>';
-        echo '<p class="description">' . esc_html__('If you modify JSON here, Simple rates will be ignored for those channels.', 'wrd-us-duty') . '</p>';
+        echo '<p class="description">' . esc_html__('If you modify JSON here, Simple rates will be ignored for those channels.', 'woocommerce-us-duties') . '</p>';
         echo '</details>';
         echo '</td></tr>';
         echo '<tr><th><label>Effective From</label></th><td><input type="date" name="effective_from" value="' . esc_attr($vals['effective_from']) . '" /></td></tr>';
         echo '<tr><th><label>Effective To</label></th><td><input type="date" name="effective_to" value="' . esc_attr($vals['effective_to']) . '" /></td></tr>';
         echo '<tr><th><label>Notes</label></th><td><textarea name="notes" rows="2" class="large-text">' . esc_textarea($vals['notes']) . '</textarea></td></tr>';
         if ($is_edit) { echo '<input type="hidden" name="id" value="' . (int)$vals['id'] . '" />'; }
-        submit_button($is_edit ? __('Update', 'wrd-us-duty') : __('Create', 'wrd-us-duty'));
+        submit_button($is_edit ? __('Update', 'woocommerce-us-duties') : __('Create', 'woocommerce-us-duties'));
         echo '</tbody></table>';
         echo '</form>';
     }
@@ -2032,10 +3555,12 @@ class WRD_Admin {
         update_post_meta($product_id, '_wrd_desc_norm', $descNorm); // Keep for legacy support
 
         // Keep direct profile links in sync with the canonical HS+origin pair.
+        $profile_id = 0;
         if ($hs_code !== '' && $origin !== '') {
             $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
             if ($profile && isset($profile['id'])) {
-                update_post_meta($product_id, '_wrd_profile_id', (int) $profile['id']);
+                $profile_id = (int) $profile['id'];
+                update_post_meta($product_id, '_wrd_profile_id', $profile_id);
             } else {
                 delete_post_meta($product_id, '_wrd_profile_id');
             }
@@ -2066,6 +3591,8 @@ class WRD_Admin {
                 self::update_normalized_meta_for_variation((int)$vid);
             }
         }
+
+        self::sync_customs_status_meta($product_id, $hs_code, $origin, $descNorm, $profile_id);
     }
 
     public static function update_normalized_meta_for_variation(int $variation_id): void {
@@ -2096,10 +3623,12 @@ class WRD_Admin {
         update_post_meta($variation_id, '_wrd_desc_norm', $descNorm); // Keep for legacy support
 
         // Sync direct profile link from effective variation values (includes parent fallback).
+        $profile_id = 0;
         if ($hs_code !== '' && $origin !== '') {
             $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
             if ($profile && isset($profile['id'])) {
-                update_post_meta($variation_id, '_wrd_profile_id', (int) $profile['id']);
+                $profile_id = (int) $profile['id'];
+                update_post_meta($variation_id, '_wrd_profile_id', $profile_id);
             } else {
                 delete_post_meta($variation_id, '_wrd_profile_id');
             }
@@ -2114,6 +3643,8 @@ class WRD_Admin {
                 update_post_meta($variation_id, '_customs_description', $profile['description_raw']);
             }
         }
+
+        self::sync_customs_status_meta($variation_id, $hs_code, $origin, $descNorm, $profile_id);
     }
 
     private function reindex_products(int $max): int {
@@ -2152,7 +3683,7 @@ class WRD_Admin {
     private function render_impacted_products_page(): void {
         $hsCode = isset($_GET['hs_code']) ? sanitize_text_field(wp_unslash($_GET['hs_code'])) : '';
         $cc = isset($_GET['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_GET['cc']))) : '';
-        if ($hsCode === '' || $cc === '') { echo '<p>' . esc_html__('Missing filter parameters.', 'wrd-us-duty') . '</p>'; return; }
+        if ($hsCode === '' || $cc === '') { echo '<p>' . esc_html__('Missing filter parameters.', 'woocommerce-us-duties') . '</p>'; return; }
 
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-impacted-products-table.php';
         $table = new WRD_Impacted_Products_Table($hsCode, $cc);
@@ -2161,13 +3692,13 @@ class WRD_Admin {
             $table->process_bulk_action();
         }
         $table->prepare_items();
-        echo '<h2>' . esc_html(sprintf(__('Impacted Products — %s (%s)', 'wrd-us-duty'), $hsCode, $cc)) . '</h2>';
+        echo '<h2>' . esc_html(sprintf(__('Impacted Products — %s (%s)', 'woocommerce-us-duties'), $hsCode, $cc)) . '</h2>';
         echo '<form method="post">';
         echo '<input type="hidden" name="page" value="wrd-customs" />';
         echo '<input type="hidden" name="tab" value="profiles" />';
         echo '<input type="hidden" name="hs_code" value="' . esc_attr($hsCode) . '" />';
         echo '<input type="hidden" name="cc" value="' . esc_attr($cc) . '" />';
-        $table->search_box(__('Search products', 'wrd-us-duty'), 'wrd_impacted');
+        $table->search_box(__('Search products', 'woocommerce-us-duties'), 'wrd_impacted');
         $table->display();
         echo '</form>';
     }
@@ -2175,29 +3706,155 @@ class WRD_Admin {
     private function render_tab_reconciliation(): void {
         require_once WRD_US_DUTY_DIR . 'includes/admin/class-wrd-reconciliation-table.php';
         echo '<h2>' . esc_html__('Product Reconciliation', 'woocommerce-us-duties') . '</h2>';
-        echo '<p class="description">' . esc_html__('Find products missing classification or without a matching duty profile. Assign an existing group or create a new one.', 'woocommerce-us-duties') . '</p>';
-        $status = isset($_GET['status']) ? sanitize_key($_GET['status']) : 'any_missing';
-        $table = new WRD_Reconciliation_Table($status);
+        echo '<p class="description">' . esc_html__('Triage product classification quality and resolve missing, unmatched, or warning states from one queue.', 'woocommerce-us-duties') . '</p>';
+
+        $status = isset($_GET['status']) ? sanitize_key($_GET['status']) : 'needs_data';
+        $type_filter = isset($_GET['rtype']) ? sanitize_key($_GET['rtype']) : 'all';
+        $source_filter = isset($_GET['rsource']) ? sanitize_key($_GET['rsource']) : 'all';
+        $category_filter = (isset($_GET['rcat']) && is_numeric($_GET['rcat'])) ? (string) max(0, (int) $_GET['rcat']) : 'all';
+        $table = new WRD_Reconciliation_Table($status, [
+            'type' => $type_filter,
+            'source' => $source_filter,
+            'category' => $category_filter,
+        ]);
+        $counts = $table->get_status_counts();
+
+        $tab_defs = [
+            'needs_data' => __('Needs Data', 'woocommerce-us-duties'),
+            'no_match' => __('No Match', 'woocommerce-us-duties'),
+            'warnings' => __('Warnings', 'woocommerce-us-duties'),
+            'ready' => __('Ready', 'woocommerce-us-duties'),
+            'all' => __('All', 'woocommerce-us-duties'),
+        ];
+
+        echo '<h3 class="nav-tab-wrapper" style="margin-top:14px;">';
+        foreach ($tab_defs as $key => $label) {
+            $url = add_query_arg([
+                'page' => 'wrd-customs',
+                'tab' => 'reconcile',
+                'status' => $key,
+                'rtype' => $type_filter,
+                'rsource' => $source_filter,
+                'rcat' => $category_filter,
+            ], admin_url('admin.php'));
+            $count = isset($counts[$key]) ? (int) $counts[$key] : 0;
+            printf(
+                '<a href="%s" class="nav-tab %s">%s <span class="count">(%d)</span></a>',
+                esc_url($url),
+                $status === $key ? 'nav-tab-active' : '',
+                esc_html($label),
+                $count
+            );
+        }
+        echo '</h3>';
+
+        $category_options = get_terms([
+            'taxonomy' => 'product_cat',
+            'hide_empty' => false,
+            'orderby' => 'name',
+            'order' => 'ASC',
+        ]);
+
+        echo '<style>
+            .wrd-reconcile-toolbar {
+                background: #fff;
+                border: 1px solid #dcdcde;
+                border-radius: 4px;
+                padding: 12px;
+                margin: 10px 0 12px;
+            }
+            .wrd-reconcile-toolbar .wrd-reconcile-toolbar-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+            }
+            .wrd-reconcile-toolbar .wrd-reconcile-toolbar-row + .wrd-reconcile-toolbar-row {
+                margin-top: 10px;
+                padding-top: 10px;
+                border-top: 1px solid #f0f0f1;
+            }
+            .wrd-reconcile-toolbar select,
+            .wrd-reconcile-toolbar input[type="text"] {
+                min-width: 160px;
+            }
+            .wrd-reconcile-toolbar .wrd-reconcile-selected-count,
+            .wrd-reconcile-toolbar .wrd-reconcile-help {
+                color: #646970;
+            }
+            .wrd-reconcile-toolbar .wrd-reconcile-help {
+                margin: 0;
+            }
+            .wrd-reconcile-toolbar .wrd-reconcile-bulk-status {
+                min-height: 20px;
+                display: inline-flex;
+                align-items: center;
+            }
+        </style>';
+
         echo '<form method="get">';
         foreach (['page'=>'wrd-customs','tab'=>'reconcile'] as $k=>$v) { echo '<input type="hidden" name="' . esc_attr($k) . '" value="' . esc_attr($v) . '" />'; }
-        // Filters
-        echo '<div class="tablenav top">';
-        echo '<div class="alignleft actions">';
-        echo '<label class="screen-reader-text" for="wrd-status">' . esc_html__('Filter status') . '</label>';
-        echo '<select name="status" id="wrd-status">';
-        $opts = [
-            'any_missing' => __('Any missing', 'woocommerce-us-duties'),
-            'missing_desc' => __('Missing HS code', 'woocommerce-us-duties'),
-            'missing_origin' => __('Missing origin', 'woocommerce-us-duties'),
-            'no_profile' => __('No matching profile', 'woocommerce-us-duties'),
+        echo '<input type="hidden" name="status" value="' . esc_attr($status) . '" />';
+        echo '<div class="wrd-reconcile-toolbar">';
+        echo '<div class="wrd-reconcile-toolbar-row">';
+        echo '<label class="screen-reader-text" for="wrd-rtype">' . esc_html__('Filter product type', 'woocommerce-us-duties') . '</label>';
+        echo '<select name="rtype" id="wrd-rtype">';
+        $type_opts = [
+            'all' => __('All product types', 'woocommerce-us-duties'),
+            'product' => __('Products only', 'woocommerce-us-duties'),
+            'variation' => __('Variations only', 'woocommerce-us-duties'),
         ];
-        foreach ($opts as $key => $label) {
-            printf('<option value="%s" %s>%s</option>', esc_attr($key), selected($status, $key, false), esc_html($label));
+        foreach ($type_opts as $key => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($key), selected($type_filter, $key, false), esc_html($label));
         }
-        echo '</select> ';
-        submit_button(__('Filter'), 'secondary', '', false);
+        echo '</select>';
+
+        echo '<label class="screen-reader-text" for="wrd-rsource">' . esc_html__('Filter source', 'woocommerce-us-duties') . '</label>';
+        echo '<select name="rsource" id="wrd-rsource">';
+        $source_opts = [
+            'all' => __('All sources', 'woocommerce-us-duties'),
+            'explicit' => __('Explicit values', 'woocommerce-us-duties'),
+            'category' => __('Category inherited', 'woocommerce-us-duties'),
+            'parent' => __('Parent inherited', 'woocommerce-us-duties'),
+            'none' => __('No source values', 'woocommerce-us-duties'),
+        ];
+        foreach ($source_opts as $key => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($key), selected($source_filter, $key, false), esc_html($label));
+        }
+        echo '</select>';
+
+        echo '<label class="screen-reader-text" for="wrd-rcat">' . esc_html__('Filter product category', 'woocommerce-us-duties') . '</label>';
+        echo '<select name="rcat" id="wrd-rcat">';
+        echo '<option value="all">' . esc_html__('All categories', 'woocommerce-us-duties') . '</option>';
+        if (!is_wp_error($category_options) && is_array($category_options)) {
+            foreach ($category_options as $term) {
+                if (!$term instanceof WP_Term) { continue; }
+                printf(
+                    '<option value="%s" %s>%s</option>',
+                    esc_attr((string) $term->term_id),
+                    selected($category_filter, (string) $term->term_id, false),
+                    esc_html($term->name)
+                );
+            }
+        }
+        echo '</select>';
+
+        submit_button(__('Apply Filters', 'woocommerce-us-duties'), 'secondary', '', false);
         echo '</div>';
-        echo '<br class="clear" />';
+
+        echo '<div class="wrd-reconcile-toolbar-row">';
+        echo '<p class="wrd-reconcile-help">' . esc_html__('Workflow: select rows, enter one HS code and one origin, then apply to selected rows. Use row Apply only for one-off fixes.', 'woocommerce-us-duties') . '</p>';
+        echo '</div>';
+
+        echo '<div class="wrd-reconcile-toolbar-row">';
+        echo '<label for="wrd-reconcile-bulk-hs">' . esc_html__('Bulk HS Code', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" />';
+        echo '<label for="wrd-reconcile-bulk-cc">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" />';
+        echo '<button type="button" id="wrd-reconcile-bulk-apply" class="button button-primary">' . esc_html__('Apply To Selected Rows', 'woocommerce-us-duties') . '</button>';
+        echo '<span class="wrd-reconcile-selected-count">' . sprintf(esc_html__('%s selected', 'woocommerce-us-duties'), '<strong>0</strong>') . '</span>';
+        echo '<span class="wrd-reconcile-bulk-status" aria-live="polite" role="status"></span>';
+        echo '</div>';
         echo '</div>';
         $table->prepare_items();
         $table->display();

@@ -37,6 +37,15 @@
 - Screenshots/GIFs for admin UI updates in `assets/` or `includes/admin/`.
 - Any migration or data-impact notes.
 
+## Release Hygiene
+- For major work (new features, significant UX changes, schema/migration updates, or behavior-changing refactors), update `IMPROVEMENTS.md` with a dated changelog entry before handoff.
+- For major work, bump the plugin version in `wc-us-duty.php` (`Version`) and `WRD_US_DUTY_VERSION` in the same commit.
+- Keep versioning semantic:
+- Patch (`x.y.Z`) for fixes and minor internal improvements.
+- Minor (`x.Y.0`) for new backward-compatible features.
+- Major (`X.0.0`) for breaking changes.
+- If a change includes a migration, explicitly mention migration impact and rollout notes in the changelog entry.
+
 ## Security & Configuration Tips
 - Sanitize and escape all input/output (`sanitize_text_field`, `wp_unslash`, `esc_html`, `esc_url`).
 - Guard direct access with `if (!defined('ABSPATH')) { exit; }`.

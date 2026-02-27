@@ -3,7 +3,7 @@ Contributors: webmemediagroup
 Tags: woocommerce, customs, duties, import duties, us, hs code, hts, cusma, ddp, dap
 Requires at least: 6.1
 Tested up to: 6.6
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -39,6 +39,12 @@ Not yet, but the structure's in place. We're optimizing faster than Trump change
 
 == Changelog ==
 
+= 0.2.0 =
+* Added HS Manager mode directly inside `Products > All Products` as a dedicated catalog view.
+* Switched table columns to customs-focused management fields in HS Manager mode.
+* Added inline row save + profile autocomplete for fast HS/origin updates in-place.
+* Refined HS Manager UI to align with WooCommerce admin table styles and status badges.
+* Removed reliance on a separate HS manager submenu workflow.
+
 = 0.1.0 =
 * Initial release.
-

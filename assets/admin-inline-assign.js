@@ -3,6 +3,7 @@ jQuery(function($) {
 
   var currentProductId = null;
   var $currentRow = null;
+  var i18n = (typeof WRDInlineAssign !== 'undefined' && WRDInlineAssign.i18n) ? WRDInlineAssign.i18n : {};
 
   // Handle "Assign Profile" row action click
   $(document).on('click', '.wrd-assign-profile-action', function(e) {
@@ -72,7 +73,7 @@ jQuery(function($) {
     var country = $row.find('.wrd-country').val().trim().toUpperCase();
 
     if (!hsCode || !country) {
-      alert('Please enter both HS code and country code.');
+      alert(i18n.missing_hs_country || 'Please enter both HS code and country code.');
       return;
     }
 
@@ -112,13 +113,13 @@ jQuery(function($) {
           $productRow.css('background-color', '');
         }, 1500);
       } else {
-        alert('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error'));
+        alert((i18n.error_prefix || 'Error:') + ' ' + (response.data && response.data.message ? response.data.message : (i18n.unknown_error || 'Unknown error')));
         $button.prop('disabled', false);
         $spinner.removeClass('is-active');
       }
     })
     .fail(function() {
-      alert('Error: Failed to assign profile. Please try again.');
+      alert((i18n.error_prefix || 'Error:') + ' ' + (i18n.assign_failed || 'Failed to assign profile. Please try again.'));
       $button.prop('disabled', false);
       $spinner.removeClass('is-active');
     });

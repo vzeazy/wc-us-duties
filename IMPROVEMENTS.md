@@ -1,5 +1,17 @@
 # Duty Rate System Improvements - Implementation Summary
 
+## 2026-02-24 - HS Manager Catalog Integration (v0.2.0)
+
+- Major UX shift: HS management now runs inside the main product catalog as an `HS Manager` view/tab on `Products > All Products`.
+- In HS Manager mode, product-table columns are customized for customs operations:
+  - SKU, Source, HS Code, Origin, Profile, Status, Actions.
+- Added inline row workflow:
+  - profile lookup autocomplete,
+  - per-row save,
+  - immediate row-level feedback without full-page navigation.
+- Refined UI to match WooCommerce admin table aesthetics with compact status/source pills and cleaner action spacing.
+- Separate submenu-first workflow is no longer the primary path; management is now catalog-native.
+
 ## What Was Changed
 
 ### 1. Category-Based Inheritance ✅
@@ -60,3 +72,40 @@
 - ✅ **Visual dashboard** to quickly identify missing data
 - ✅ **Backward compatible** - existing products work unchanged
 - ✅ **Flexible** - can use category defaults OR product-specific overrides
+
+## Profiles Quick Edit Plan (Phased)
+
+### Goal
+Add a streamlined quick-edit workflow on the Profiles screen by extending existing bulk edit controls beyond dates.
+
+### Phase Tracking
+- [x] Phase 1: Define scope and execution plan in repo docs.
+- [x] Phase 2: Implement server-side bulk update support for rates, CUSMA, and notes.
+- [x] Phase 3: Extend Profiles bulk edit UI and client-side validation for the new actions.
+- [x] Phase 4: Lint/verify changed files and document completion notes.
+
+### Milestone Notes
+- Phase 2 completed:
+  - Extended the existing Profiles bulk save path to support action-based updates for postal/commercial base rates, CUSMA toggling, and notes replace/append/clear.
+  - Kept existing date bulk-edit behavior and backward-compatible date params intact.
+  - Reused JSON normalization patterns so partial/legacy JSON payloads stay safe during updates.
+- Phase 3 completed:
+  - Expanded the Profiles bulk edit panel UI with action controls for postal rate, commercial rate, CUSMA, and notes.
+  - Updated the bulk-edit JS to toggle/show relevant inputs per action and validate dates/rates/notes before submit.
+  - Consolidated action validation under a shared bulk-action selector class for cleaner maintenance.
+- Phase 4 completed:
+  - Ran PHP lint checks:
+    - `php -l includes/admin/class-wrd-profiles-table.php`
+    - `php -l includes/class-wrd-admin.php`
+  - Both lint checks passed with no syntax errors.
+  - Documented completion and retained compatibility with existing date bulk-edit behavior.
+
+### Scope
+- Reuse existing Profiles bulk edit flow.
+- Keep date bulk editing intact.
+- Add bulk action controls for:
+  - Postal duty rate (%)
+  - Commercial duty rate (%)
+  - CUSMA flag
+  - Notes (replace/append/clear)
+- Preserve existing JSON normalization behavior and data safety.

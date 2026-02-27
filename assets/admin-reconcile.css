@@ -1,0 +1,83 @@
+.wrd-reconcile-help {
+    margin: 8px 0 12px;
+}
+
+.wrd-reconcile-bulk {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 10px 0 12px;
+}
+
+.wrd-reconcile-bulk-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.wrd-reconcile-bulk-controls label {
+    color: #1d2327;
+    font-weight: 500;
+}
+
+.wrd-reconcile-bulk-controls input[type="text"] {
+    width: 140px;
+    min-height: 30px;
+}
+
+.wrd-reconcile-selected-count {
+    color: #50575e;
+}
+
+.wrd-reconcile-bulk-status {
+    margin-left: 4px;
+    font-size: 12px;
+    color: #646970;
+}
+
+.wrd-reconcile-bulk-status.is-info {
+    color: #2271b1;
+}
+
+.wrd-reconcile-bulk-status.is-success {
+    color: #008a20;
+}
+
+.wrd-reconcile-bulk-status.is-error {
+    color: #b32d2e;
+}
+
+.wp-list-table .column-cb {
+    width: 2.2em;
+}
+
+.wp-list-table .column-hs_code input.wrd-hs,
+.wp-list-table .column-origin input.wrd-cc {
+    width: 100%;
+    min-height: 30px;
+}
+
+.wp-list-table .column-assign .wrd-row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.wp-list-table .column-assign .wrd-status {
+    font-size: 12px;
+    color: #646970;
+}
+
+.wp-list-table .column-assign .wrd-status.is-info {
+    color: #2271b1;
+}
+
+.wp-list-table .column-assign .wrd-status.is-success {
+    color: #008a20;
+}
+
+.wp-list-table .column-assign .wrd-status.is-error {
+    color: #b32d2e;
+}

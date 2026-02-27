@@ -4,7 +4,6 @@
     var WRDBulkEdit = {
         init: function() {
             this.bindEvents();
-            this.attachAutocomplete();
         },
 
         bindEvents: function() {
@@ -13,6 +12,8 @@
             
             // Handle bulk edit form interactions
             $(document).on('change', '.bulk-date-action', this.toggleDateInput);
+            $(document).on('change', '.bulk-rate-action', this.toggleRateInput);
+            $(document).on('change', '.bulk-notes-action', this.toggleNotesInput);
             $(document).on('click', '#wrd-bulk-edit .cancel', this.cancelBulkEdit);
             $(document).on('click', '#doaction, #doaction2', this.handleBulkAction);
             // Explicitly mark when the bulk edit Update button is used
@@ -62,13 +63,38 @@
             }
         },
 
+        toggleRateInput: function() {
+            var $select = $(this);
+            var $rateInput = $select.siblings('.bulk-rate-input');
+
+            if ($select.val() === 'set') {
+                $rateInput.show().focus();
+            } else {
+                $rateInput.hide().val('');
+            }
+        },
+
+        toggleNotesInput: function() {
+            var $select = $(this);
+            var $notesInput = $select.siblings('.bulk-notes-input');
+            var action = $select.val();
+
+            if (action === 'replace' || action === 'append') {
+                $notesInput.show().focus();
+            } else {
+                $notesInput.hide().val('');
+            }
+        },
+
         cancelBulkEdit: function() {
             $('#wrd-bulk-edit').fadeOut(200);
             $('#bulk-action-selector-top, #bulk-action-selector-bottom').val('');
             
             // Reset form fields
-            $('.bulk-date-action').val('');
+            $('.wrd-bulk-action-select').val('');
             $('.bulk-date-input').hide().val('');
+            $('.bulk-rate-input').hide().val('');
+            $('.bulk-notes-input').hide().val('');
             // Clear any pending bulk submit flags
             $('form').removeData('wrdBulkSubmit');
             
@@ -114,7 +140,7 @@
                 var bulkPanelVisible = $('#wrd-bulk-edit:visible').length > 0;
                 if (bulkPanelVisible) {
                     var hasActionChosen = false;
-                    $('#wrd-bulk-edit .bulk-date-action').each(function(){
+                    $('#wrd-bulk-edit .wrd-bulk-action-select').each(function(){
                         if ($(this).val() !== '') { hasActionChosen = true; return false; }
                     });
                     if (hasActionChosen) {
@@ -138,7 +164,7 @@
             
             // Check if at least one action is selected
             var hasAction = false;
-            $('.bulk-date-action').each(function() {
+            $('#wrd-bulk-edit .wrd-bulk-action-select').each(function() {
                 if ($(this).val() !== '') {
                     hasAction = true;
                     return false;
@@ -146,7 +172,7 @@
             });
             
             if (!hasAction) {
-                alert('Please select at least one date action to perform.');
+                alert(wrdBulkEdit.strings.select_action);
                 $form.removeData('wrdBulkSubmit');
                 return false;
             }
@@ -159,8 +185,55 @@
                 
                 if ($select.val() === 'set') {
                     if (!$dateInput.val()) {
-                        alert('Please enter a date for the selected action.');
+                        alert(wrdBulkEdit.strings.enter_date);
                         $dateInput.focus();
+                        $form.removeData('wrdBulkSubmit');
+                        isValid = false;
+                        return false;
+                    }
+                }
+            });
+
+            if (!isValid) {
+                return false;
+            }
+
+            $('.bulk-rate-action').each(function() {
+                var $select = $(this);
+                var $rateInput = $select.siblings('.bulk-rate-input');
+
+                if ($select.val() === 'set') {
+                    var raw = $rateInput.val();
+                    var parsed = parseFloat(raw);
+                    if (raw === '') {
+                        alert(wrdBulkEdit.strings.enter_rate);
+                        $rateInput.focus();
+                        $form.removeData('wrdBulkSubmit');
+                        isValid = false;
+                        return false;
+                    }
+                    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+                        alert(wrdBulkEdit.strings.invalid_rate);
+                        $rateInput.focus();
+                        $form.removeData('wrdBulkSubmit');
+                        isValid = false;
+                        return false;
+                    }
+                }
+            });
+
+            if (!isValid) {
+                return false;
+            }
+
+            $('.bulk-notes-action').each(function() {
+                var $select = $(this);
+                var $notesInput = $select.siblings('.bulk-notes-input');
+
+                if ($select.val() === 'replace' || $select.val() === 'append') {
+                    if (!$notesInput.val().trim()) {
+                        alert(wrdBulkEdit.strings.enter_notes);
+                        $notesInput.focus();
                         $form.removeData('wrdBulkSubmit');
                         isValid = false;
                         return false;
@@ -182,46 +255,6 @@
             $form.removeData('wrdBulkSubmit');
             
             return true;
-        },
-
-        attachAutocomplete: function() {
-            // Reuse existing autocomplete functionality from admin-quick-bulk.js
-            function attachAutocomplete(context) {
-                $(context).find('input.wrd-profile-lookup').each(function() {
-                    var $input = $(this);
-                    if ($input.data('wrdBound')) return;
-                    $input.data('wrdBound', true);
-                    
-                    if (typeof $input.autocomplete === 'function' && typeof WRDProfiles !== 'undefined') {
-                        $input.autocomplete({
-                            minLength: 2,
-                            source: function(req, resp) {
-                                $.getJSON(WRDProfiles.ajax, { 
-                                    action: 'wrd_search_profiles', 
-                                    nonce: WRDProfiles.nonce, 
-                                    term: req.term 
-                                }, function(data) {
-                                    resp(data || []);
-                                });
-                            },
-                            select: function(e, ui) {
-                                var item = ui.item || {};
-                                var $wrap = $input.closest('.inline-edit-col, .wrd-customs-inline, .inline-edit-row');
-                                $wrap.find('input[name="wrd_customs_description"]').val(item.desc || '');
-                                $wrap.find('input[name="wrd_country_of_origin"]').val(item.cc || '');
-                            }
-                        });
-                    }
-                });
-            }
-            
-            // Initial bind
-            attachAutocomplete(document.body);
-            
-            // Bind when bulk edit opens
-            $(document).on('bulk_edit_opened', function() {
-                attachAutocomplete('#wrd-bulk-edit');
-            });
         }
     };
 
