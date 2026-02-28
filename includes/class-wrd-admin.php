@@ -820,12 +820,13 @@ class WRD_Admin {
                 $notices[] = [
                     'class' => 'notice notice-info',
                     'message' => sprintf(
-                        __('Products CSV: %1$d rows, %2$d matched, %3$d updated, %4$d skipped, %5$d errors.', 'woocommerce-us-duties'),
+                        __('Products CSV: %1$d rows, %2$d matched, %3$d updated, %4$d skipped, %5$d errors. (dry-run: %6$s)', 'woocommerce-us-duties'),
                         (int) ($summary['rows'] ?? 0),
                         (int) ($summary['matched'] ?? 0),
                         (int) ($summary['updated'] ?? 0),
                         (int) ($summary['skipped'] ?? 0),
-                        (int) ($summary['errors'] ?? 0)
+                        (int) ($summary['errors'] ?? 0),
+                        !empty($summary['dry_run']) ? 'yes' : 'no'
                     ),
                     'details' => !empty($summary['messages']) ? implode("\n", array_slice((array) $summary['messages'], 0, 50)) : '',
                 ];
@@ -1036,7 +1037,7 @@ class WRD_Admin {
         echo '<div class="postbox">';
         echo '<h2 class="hndle"><span>' . esc_html__('Assign Customs to Products (CSV)', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Upload a CSV with columns for product ID/SKU, HS code, country code, and optionally description. HS code + country is preferred. Header mapping is optional under Advanced.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Upload a CSV with columns for product ID/SKU, HS code, country code, and optionally description plus Section 232 inputs. HS code + country is preferred. Header mapping is optional under Advanced.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('wrd_products_import', 'wrd_products_import_nonce');
         echo '<p><input type="file" name="wrd_products_csv" accept=".csv" required /></p>';
@@ -1052,6 +1053,15 @@ class WRD_Admin {
         echo '<label>' . esc_html__('HS Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_hs" placeholder="hs_code" /></label>';
         echo '<label>' . esc_html__('Country Code Header', 'woocommerce-us-duties') . ' <input type="text" name="map_cc" placeholder="country_code" /></label>';
         echo '<label>' . esc_html__('Description Header', 'woocommerce-us-duties') . ' <input type="text" name="map_desc" placeholder="customs_description" /></label>';
+        echo '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('Section 232 Applicable Header', 'woocommerce-us-duties') . ' <input type="text" name="map_s232_applicable" placeholder="section_232_applicable" /></label>';
+        echo '<label>' . esc_html__('S232 Steel Value Header', 'woocommerce-us-duties') . ' <input type="text" name="map_s232_steel" placeholder="s232_steel_value" /></label>';
+        echo '<label>' . esc_html__('S232 Aluminum Value Header', 'woocommerce-us-duties') . ' <input type="text" name="map_s232_aluminum" placeholder="s232_aluminum_value" /></label>';
+        echo '</p>';
+        echo '<p class="wrd-import-form-row">';
+        echo '<label>' . esc_html__('S232 Copper Value Header', 'woocommerce-us-duties') . ' <input type="text" name="map_s232_copper" placeholder="s232_copper_value" /></label>';
+        echo '<label>' . esc_html__('Manufacturer MID Header', 'woocommerce-us-duties') . ' <input type="text" name="map_mid" placeholder="manufacturer_id_mid" /></label>';
         echo '</p>';
         echo '</details>';
         submit_button(__('Import Products CSV', 'woocommerce-us-duties'), 'primary', '', false);
@@ -1495,22 +1505,31 @@ class WRD_Admin {
         global $wpdb;
         $table = WRD_DB::table_profiles();
         $today = current_time('Y-m-d');
-        $statusClause = $includeInactive ? '' : $wpdb->prepare(' AND (effective_to IS NULL OR effective_to >= %s) ', $today);
+        $query_profiles = static function (string $statusClause) use ($wpdb, $table, $limit): array {
+            $sql = "
+                SELECT id, description_raw, country_code, hs_code, source, effective_from, effective_to, notes
+                FROM {$table}
+                WHERE (
+                    TRIM(description_raw) = ''
+                    OR LOWER(TRIM(description_raw)) IN ('n/a','na','none','null','-','--')
+                    OR LOWER(TRIM(description_raw)) REGEXP '^(n/?a|none|null|-+)([[:space:]]*\\(|$)'
+                    OR LOWER(TRIM(description_raw)) LIKE '%hs provided%'
+                    OR TRIM(description_raw) REGEXP '^(HS|hs)[[:space:]]+[0-9]'
+                    OR TRIM(hs_code) = ''
+                    OR TRIM(country_code) = ''
+                )
+                {$statusClause}
+                ORDER BY last_updated DESC, id DESC
+                LIMIT " . (int) $limit;
+            return (array) $wpdb->get_results($sql, ARRAY_A);
+        };
 
-        $sql = "
-            SELECT id, description_raw, country_code, hs_code, source, effective_from, effective_to, notes
-            FROM {$table}
-            WHERE (
-                TRIM(description_raw) = ''
-                OR LOWER(TRIM(description_raw)) IN ('n/a','na','none','null','-','--')
-                OR TRIM(description_raw) REGEXP '^(HS|hs)[[:space:]]+[0-9]'
-                OR TRIM(hs_code) = ''
-                OR TRIM(country_code) = ''
-            )
-            {$statusClause}
-            ORDER BY last_updated DESC, id DESC
-            LIMIT " . (int) $limit;
-        $profiles = (array) $wpdb->get_results($sql, ARRAY_A);
+        $statusClause = $includeInactive ? '' : $wpdb->prepare(' AND (effective_to IS NULL OR effective_to >= %s) ', $today);
+        $profiles = $query_profiles($statusClause);
+        if (empty($profiles) && !$includeInactive) {
+            // Fallback: if no active candidates match, include inactive candidates so curation export still has useful rows.
+            $profiles = $query_profiles('');
+        }
 
         $rows = [];
         foreach ($profiles as $profile) {
@@ -1540,6 +1559,56 @@ class WRD_Admin {
                 'linked_category_paths' => (array) ($context['linked_category_paths'] ?? []),
                 'linked_category_defaults' => (array) ($context['linked_category_defaults'] ?? []),
             ];
+        }
+
+        if (empty($rows)) {
+            // Final fallback: export recent profiles with context so curation can still proceed when strict issue filters miss data.
+            $seedSql = "
+                SELECT id, description_raw, country_code, hs_code, source, effective_from, effective_to, notes
+                FROM {$table}
+                WHERE 1=1
+                {$statusClause}
+                ORDER BY last_updated DESC, id DESC
+                LIMIT " . (int) $limit;
+            $seedProfiles = (array) $wpdb->get_results($seedSql, ARRAY_A);
+            if (empty($seedProfiles) && !$includeInactive) {
+                $seedSql = "
+                    SELECT id, description_raw, country_code, hs_code, source, effective_from, effective_to, notes
+                    FROM {$table}
+                    ORDER BY last_updated DESC, id DESC
+                    LIMIT " . (int) $limit;
+                $seedProfiles = (array) $wpdb->get_results($seedSql, ARRAY_A);
+            }
+
+            foreach ($seedProfiles as $profile) {
+                $profileId = (int) ($profile['id'] ?? 0);
+                if ($profileId <= 0) { continue; }
+                $description = (string) ($profile['description_raw'] ?? '');
+                $hsCode = (string) ($profile['hs_code'] ?? '');
+                $countryCode = (string) ($profile['country_code'] ?? '');
+                $issues = $this->get_profile_curation_issues($description, $hsCode, $countryCode);
+                if (!$issues) {
+                    $issues = ['manual_review_seed'];
+                }
+                $context = $this->get_profile_linked_products_context($profileId, $contextProducts);
+                $rows[] = [
+                    'profile_id' => $profileId,
+                    'issues' => $issues,
+                    'description_raw' => $description,
+                    'country_code' => $countryCode,
+                    'hs_code' => $hsCode,
+                    'source' => (string) ($profile['source'] ?? ''),
+                    'effective_from' => (string) ($profile['effective_from'] ?? ''),
+                    'effective_to' => (string) ($profile['effective_to'] ?? ''),
+                    'notes' => (string) ($profile['notes'] ?? ''),
+                    'linked_product_count' => (int) ($context['linked_product_count'] ?? 0),
+                    'linked_products' => (array) ($context['linked_products'] ?? []),
+                    'sample_customs_descriptions' => (array) ($context['sample_customs_descriptions'] ?? []),
+                    'top_title_terms' => (array) ($context['top_title_terms'] ?? []),
+                    'linked_category_paths' => (array) ($context['linked_category_paths'] ?? []),
+                    'linked_category_defaults' => (array) ($context['linked_category_defaults'] ?? []),
+                ];
+            }
         }
 
         return $rows;
@@ -1934,6 +2003,12 @@ class WRD_Admin {
     private function description_needs_curation(string $description): bool {
         $normalized = strtolower(trim($description));
         if ($normalized === '' || in_array($normalized, ['n/a', 'na', 'none', 'null', '-', '--'], true)) {
+            return true;
+        }
+        if ((bool) preg_match('/^(n\/?a|none|null|-+)(\s*\(|$)/i', trim($description))) {
+            return true;
+        }
+        if (strpos($normalized, 'hs provided') !== false) {
             return true;
         }
         return (bool) preg_match('/^hs\s+[0-9.]+$/i', trim($description));
@@ -2871,7 +2946,7 @@ class WRD_Admin {
 
     /**
      * Canonical write path for product/variation customs data.
-     * Supported keys in $changes: hs_code, origin, desc, metal_value_232, metal_mode_232.
+     * Supported keys in $changes: hs_code, origin, desc, metal_value_232, metal_mode_232, manufacturer_mid.
      */
     public static function upsert_product_classification(int $product_id, array $changes): bool {
         $product = wc_get_product($product_id);
@@ -2907,6 +2982,14 @@ class WRD_Admin {
             }
             if ($product->is_type('variation')) {
                 $product->update_meta_data('_wrd_232_basis_mode', $mode);
+            }
+        }
+        if (array_key_exists('manufacturer_mid', $changes)) {
+            $mid = trim(sanitize_text_field((string)$changes['manufacturer_mid']));
+            if ($mid === '') {
+                $product->delete_meta_data('_wrd_manufacturer_mid');
+            } else {
+                $product->update_meta_data('_wrd_manufacturer_mid', $mid);
             }
         }
 
@@ -4466,27 +4549,50 @@ class WRD_Admin {
         $header = fgetcsv($fh);
         if (!$header) { fclose($fh); return null; }
         $header_lc = array_map(function($h){ return strtolower(trim((string)$h)); }, $header);
+        $header_norm = array_map([self::class, 'normalize_products_csv_header'], $header);
 
         $map_identifier = strtolower(trim((string)($_POST['map_identifier'] ?? '')));
         $map_hs = strtolower(trim((string)($_POST['map_hs'] ?? '')));
         $map_desc = strtolower(trim((string)($_POST['map_desc'] ?? '')));
         $map_cc = strtolower(trim((string)($_POST['map_cc'] ?? '')));
+        $map_s232_applicable = strtolower(trim((string)($_POST['map_s232_applicable'] ?? '')));
+        $map_s232_steel = strtolower(trim((string)($_POST['map_s232_steel'] ?? '')));
+        $map_s232_aluminum = strtolower(trim((string)($_POST['map_s232_aluminum'] ?? '')));
+        $map_s232_copper = strtolower(trim((string)($_POST['map_s232_copper'] ?? '')));
+        $map_mid = strtolower(trim((string)($_POST['map_mid'] ?? '')));
         $identifier_type = strtolower(trim((string)($_POST['identifier_type'] ?? 'auto')));
         $dry_run = !empty($_POST['dry_run']);
 
-        // Autodetect common names if not provided
-        $auto_idx = function(array $cands) use ($header_lc) {
-            foreach ($cands as $cand) {
-                $i = array_search($cand, $header_lc, true);
-                if ($i !== false) { return $i; }
+        $find_idx = function(string $explicit, array $aliases) use ($header_lc, $header_norm): int {
+            $candidates = [];
+            if ($explicit !== '') {
+                $candidates[] = $explicit;
+                $candidates[] = self::normalize_products_csv_header($explicit);
+            } else {
+                foreach ($aliases as $alias) {
+                    $candidates[] = strtolower(trim((string)$alias));
+                    $candidates[] = self::normalize_products_csv_header((string)$alias);
+                }
+            }
+            foreach (array_values(array_unique($candidates)) as $candidate) {
+                if ($candidate === '') { continue; }
+                $i = array_search($candidate, $header_lc, true);
+                if ($i !== false) { return (int)$i; }
+                $i = array_search($candidate, $header_norm, true);
+                if ($i !== false) { return (int)$i; }
             }
             return -1;
         };
 
-        $idx_ident = $map_identifier !== '' ? array_search($map_identifier, $header_lc, true) : $auto_idx(['product_id','id','sku','product_sku']);
-        $idx_hs = $map_hs !== '' ? array_search($map_hs, $header_lc, true) : $auto_idx(['hs_code','hs','hscode','tariff_code']);
-        $idx_desc = $map_desc !== '' ? array_search($map_desc, $header_lc, true) : $auto_idx(['customs_description','description','customs_desc']);
-        $idx_cc = $map_cc !== '' ? array_search($map_cc, $header_lc, true) : $auto_idx(['country_code','origin','country','cc']);
+        $idx_ident = $find_idx($map_identifier, ['product_id','id','sku','product_sku','product sku','item_number','item number']);
+        $idx_hs = $find_idx($map_hs, ['hs_code','hs','hscode','tariff_code','tariff code','hs code','hts','harmonized code']);
+        $idx_desc = $find_idx($map_desc, ['customs_description','description','customs_desc','customs description','description_for_zonos']);
+        $idx_cc = $find_idx($map_cc, ['country_code','country_of_origin','country of origin','origin','country','cc','coo','origin_country']);
+        $idx_232_applicable = $find_idx($map_s232_applicable, ['section_232_applicable','section 232 applicable','s232_applicable']);
+        $idx_232_steel = $find_idx($map_s232_steel, ['s232_steel_value','s232 steel value','section_232_steel_value']);
+        $idx_232_aluminum = $find_idx($map_s232_aluminum, ['s232_aluminum_value','s232 aluminum value','section_232_aluminum_value']);
+        $idx_232_copper = $find_idx($map_s232_copper, ['s232_copper_value','s232 copper value','section_232_copper_value']);
+        $idx_mid = $find_idx($map_mid, ['manufacturer_id_mid','manufacturer id (mid)','manufacturer_mid','mid']);
 
         $messages = [];
         if ($idx_ident === -1) { $messages[] = 'Identifier header not found.'; }
@@ -4501,11 +4607,16 @@ class WRD_Admin {
         $rows = $matched = $updated = $skipped = $errors = 0;
         while (($row = fgetcsv($fh)) !== false) {
             $rows++;
-            $ident = isset($row[$idx_ident]) ? trim((string)$row[$idx_ident]) : '';
+            $ident = isset($row[$idx_ident]) ? self::normalize_products_csv_identifier((string)$row[$idx_ident]) : '';
             $hs_code = ($idx_hs !== -1 && isset($row[$idx_hs])) ? trim((string)$row[$idx_hs]) : '';
             $desc = ($idx_desc !== -1 && isset($row[$idx_desc])) ? trim((string)$row[$idx_desc]) : '';
             $cc = strtoupper(isset($row[$idx_cc]) ? trim((string)$row[$idx_cc]) : '');
-            if ($ident === '' || ($hs_code === '' && $desc === '') || $cc === '') {
+            if ($ident === '') {
+                $skipped++;
+                $messages[] = "Row {$rows}: missing SKU/Product ID";
+                continue;
+            }
+            if (($hs_code === '' && $desc === '') || $cc === '') {
                 $skipped++;
                 $messages[] = "Row {$rows}: missing field(s)";
                 continue;
@@ -4538,12 +4649,72 @@ class WRD_Admin {
             $changes = ['origin' => $cc];
             if ($hs_code !== '') { $changes['hs_code'] = $hs_code; }
             if ($desc !== '') { $changes['desc'] = $desc; }
+            $mid = ($idx_mid !== -1 && isset($row[$idx_mid])) ? trim((string)$row[$idx_mid]) : '';
+            if ($mid !== '') {
+                $changes['manufacturer_mid'] = $mid;
+            }
+
+            $raw_232_applicable = ($idx_232_applicable !== -1 && isset($row[$idx_232_applicable])) ? strtolower(trim((string)$row[$idx_232_applicable])) : '';
+            if ($raw_232_applicable !== '') {
+                $bool_true = ['1','true','yes','y'];
+                $bool_false = ['0','false','no','n'];
+                if (in_array($raw_232_applicable, $bool_true, true)) {
+                    $s232_total = 0.0;
+                    $s232_has_value = false;
+                    $value_fields = [
+                        'steel' => $idx_232_steel,
+                        'aluminum' => $idx_232_aluminum,
+                        'copper' => $idx_232_copper,
+                    ];
+                    foreach ($value_fields as $label => $idx_value) {
+                        if ($idx_value === -1 || !isset($row[$idx_value])) { continue; }
+                        $raw_value = trim((string)$row[$idx_value]);
+                        if ($raw_value === '') { continue; }
+                        if (!is_numeric($raw_value)) {
+                            $messages[] = "Row {$rows}: invalid S232 {$label} value '{$raw_value}'";
+                            continue;
+                        }
+                        $s232_total += max(0.0, (float)$raw_value);
+                        $s232_has_value = true;
+                    }
+                    if ($s232_has_value) {
+                        $changes['metal_value_232'] = (string)$s232_total;
+                    } else {
+                        $messages[] = "Row {$rows}: Section 232 is TRUE but no valid S232 metal values were provided";
+                    }
+                    if ($hs_code !== '' && $cc !== '') {
+                        $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
+                        if (!$profile) {
+                            $messages[] = "Row {$rows}: no duty profile found for {$hs_code} ({$cc}); Section 232 metal value imported but no rate component is currently linked";
+                        } elseif (!$this->profile_has_section_232($profile)) {
+                            $messages[] = "Row {$rows}: profile {$hs_code} ({$cc}) has no Section 232 component/rate; imported metal value will not affect duty until profile rates include 232";
+                        }
+                    }
+                } elseif (in_array($raw_232_applicable, $bool_false, true)) {
+                    $changes['metal_value_232'] = '';
+                } else {
+                    $messages[] = "Row {$rows}: invalid Section 232 Applicable value '{$raw_232_applicable}'";
+                }
+            }
             self::upsert_product_classification((int) $product->get_id(), $changes);
             $updated++;
         }
         fclose($fh);
 
-        return compact('rows','matched','updated','skipped','errors') + ['messages' => $messages];
+        return compact('rows','matched','updated','skipped','errors') + ['dry_run' => $dry_run, 'messages' => $messages];
+    }
+
+    private static function normalize_products_csv_header(string $header): string {
+        $normalized = strtolower(trim($header));
+        $normalized = preg_replace('/[^a-z0-9]+/', '_', $normalized);
+        return trim((string)$normalized, '_');
+    }
+
+    private static function normalize_products_csv_identifier(string $identifier): string {
+        $value = str_replace("\xC2\xA0", ' ', $identifier);
+        $value = str_replace(["\xE2\x80\x90", "\xE2\x80\x91", "\xE2\x80\x92", "\xE2\x80\x93", "\xE2\x80\x94", "\xE2\x88\x92"], '-', $value);
+        $value = preg_replace('/\s+/u', ' ', (string)$value);
+        return trim((string)$value);
     }
 
     // --- Normalized meta helpers and impacted products UI ---
