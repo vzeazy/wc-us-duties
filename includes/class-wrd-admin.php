@@ -3362,6 +3362,7 @@ class WRD_Admin {
                     'nonce' => wp_create_nonce('wrd_reconcile_nonce'),
                     'i18n' => [
                         'missing' => __('HS code and origin are required.', 'woocommerce-us-duties'),
+                        'missing232' => __('Section 232 metal value is required for this profile.', 'woocommerce-us-duties'),
                         'invalidCountry' => __('Origin must be a 2-letter country code.', 'woocommerce-us-duties'),
                         'saving' => __('Saving...', 'woocommerce-us-duties'),
                         'saved' => __('Saved', 'woocommerce-us-duties'),
@@ -3424,13 +3425,18 @@ class WRD_Admin {
         $pid = isset($_POST['product_id']) ? (int) $_POST['product_id'] : 0;
         $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
         $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+        $metal_232 = isset($_POST['metal_value_232']) ? trim(sanitize_text_field(wp_unslash($_POST['metal_value_232']))) : null;
         if ($pid <= 0 || $hs_code === '' || $cc === '') { wp_send_json_error(['message' => 'invalid_params'], 400); }
         $product = wc_get_product($pid);
         if (!$product) { wp_send_json_error(['message' => 'not_found'], 404); }
-        self::upsert_product_classification($pid, [
+        $changes = [
             'hs_code' => $hs_code,
             'origin' => $cc,
-        ]);
+        ];
+        if ($metal_232 !== null) {
+            $changes['metal_value_232'] = $metal_232;
+        }
+        self::upsert_product_classification($pid, $changes);
 
         // Optionally return matched profile data.
         $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
@@ -3457,6 +3463,7 @@ class WRD_Admin {
         })));
         $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
         $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+        $metal_232 = isset($_POST['metal_value_232']) ? trim(sanitize_text_field(wp_unslash($_POST['metal_value_232']))) : null;
 
         if (empty($product_ids) || $hs_code === '' || $cc === '') {
             wp_send_json_error(['message' => 'invalid_params'], 400);
@@ -3470,10 +3477,14 @@ class WRD_Admin {
                 $skipped++;
                 continue;
             }
-            self::upsert_product_classification($pid, [
+            $changes = [
                 'hs_code' => $hs_code,
                 'origin' => $cc,
-            ]);
+            ];
+            if ($metal_232 !== null && $metal_232 !== '') {
+                $changes['metal_value_232'] = $metal_232;
+            }
+            self::upsert_product_classification($pid, $changes);
             $updated++;
         }
 
@@ -4961,10 +4972,12 @@ class WRD_Admin {
             .wrd-reconcile-field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
             .wrd-reconcile-field-label { color: #50575e; font-size: 12px; font-weight: 600; white-space: nowrap; }
             .wrd-reconcile-inline-fields select,
-            .wrd-reconcile-inline-fields input[type="text"] { min-width: 160px; margin: 0; }
+            .wrd-reconcile-inline-fields input[type="text"],
+            .wrd-reconcile-inline-fields input[type="number"] { min-width: 160px; margin: 0; }
             .wrd-reconcile-inline-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; }
             .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-fields { flex-wrap: wrap; }
-            .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-fields input[type="text"] { min-width: 130px; }
+            .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-fields input[type="text"],
+            .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-fields input[type="number"] { min-width: 130px; }
             .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-actions { margin-left: 0; flex-wrap: wrap; min-width: 0; }
             .wrd-reconcile-clear.button,
             .wrd-reconcile-apply-filters.button,
@@ -4982,7 +4995,8 @@ class WRD_Admin {
                 .wrd-reconcile-inline-fields { flex-wrap: wrap; width: 100%; }
                 .wrd-reconcile-field { flex-direction: column; align-items: stretch; width: 100%; }
                 .wrd-reconcile-inline-fields select,
-                .wrd-reconcile-inline-fields input[type="text"] { min-width: 0; width: 100%; }
+                .wrd-reconcile-inline-fields input[type="text"],
+                .wrd-reconcile-inline-fields input[type="number"] { min-width: 0; width: 100%; }
                 .wrd-reconcile-inline-actions { margin-left: 0; width: 100%; justify-content: flex-start; flex-wrap: wrap; }
             }
         </style>';
@@ -5041,6 +5055,7 @@ class WRD_Admin {
         echo '<div class="wrd-reconcile-inline-fields">';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk HS', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" /></label>';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';
         echo '</div>';
         echo '<div class="wrd-reconcile-inline-actions"><span class="wrd-reconcile-selected-count">' . sprintf(esc_html__('%s selected', 'woocommerce-us-duties'), '<strong>0</strong>') . '</span><button type="button" id="wrd-reconcile-bulk-apply" class="button button-primary">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button><span class="wrd-reconcile-bulk-status" aria-live="polite" role="status"></span></div>';
         echo '</div>';

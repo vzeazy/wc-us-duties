@@ -54,7 +54,8 @@
 }
 
 .wp-list-table .column-hs_code input.wrd-hs,
-.wp-list-table .column-origin input.wrd-cc {
+.wp-list-table .column-origin input.wrd-cc,
+.wp-list-table .column-metal_232 input.wrd-232-metal {
     width: 100%;
     min-height: 30px;
 }

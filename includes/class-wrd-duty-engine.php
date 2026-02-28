@@ -42,6 +42,10 @@ class WRD_Duty_Engine {
         return ($value >= 1.0) ? $value : ($value * 100.0);
     }
 
+    private static function is_section_232_code(string $code): bool {
+        return strpos(sanitize_key($code), '232') !== false;
+    }
+
     private static function resolve_product_metal_value_usd(\WC_Product $product, float $qty = 1.0): ?float {
         $qty = max(1.0, $qty);
         $mode = 'inherit';
@@ -150,7 +154,7 @@ class WRD_Duty_Engine {
             $basis = (string)$component['basis'];
             $ratePct = (float)$component['rate_pct'];
 
-            if ($isCusma && $code !== 'section_232') {
+            if ($isCusma) {
                 $outComponents[] = [
                     'code' => $code,
                     'label' => (string)$component['label'],
@@ -172,7 +176,7 @@ class WRD_Duty_Engine {
                 if ($metalValue === null) {
                     $applied = false;
                     $reason = 'missing_product_metal_value_usd';
-                    $missing232Basis = $missing232Basis || ($code === 'section_232');
+                    $missing232Basis = $missing232Basis || self::is_section_232_code($code);
                 } else {
                     $basisValue = max(0.0, (float)$metalValue);
                 }
@@ -336,7 +340,7 @@ class WRD_Duty_Engine {
             $isCusma = false;
             if ($dest === 'US' && $cusmaEnabled && in_array(strtoupper((string)$origin), $cusmaList, true)) {
                 $isCusma = true;
-            } elseif ($profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
+            } elseif ($dest === 'US' && $profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
                 $isCusma = in_array('CUSMA', $profile['fta_flags'], true) && in_array(strtoupper((string)$origin), ['CA','US','MX'], true);
             }
 
@@ -480,7 +484,7 @@ class WRD_Duty_Engine {
         $cusmaList = array_filter(array_map('trim', explode(',', strtoupper((string)($settings['cusma_countries'] ?? 'CA,US')))));
         if ($dest === 'US' && $cusmaEnabled && in_array($origin, $cusmaList, true)) {
             $isCusma = true;
-        } elseif ($profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
+        } elseif ($dest === 'US' && $profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
             $isCusma = in_array('CUSMA', $profile['fta_flags'], true) && in_array($origin, ['CA','US','MX'], true);
         }
         $valueStore = (float)$product->get_price() * max(1, $qty);

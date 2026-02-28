@@ -44,6 +44,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'source' => __('Source', 'woocommerce-us-duties'),
             'hs_code' => __('HS Code', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
+            'metal_232' => __('232 Metal USD', 'woocommerce-us-duties'),
             'status' => __('Status', 'woocommerce-us-duties'),
             'assign' => __('Action', 'woocommerce-us-duties'),
         ];
@@ -99,9 +100,18 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     protected function column_assign($item) {
         $pid = (int) $item['id'];
         return '<div class="wrd-row-actions" data-product="' . esc_attr($pid) . '">'
+             . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
              . '<button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
              . '<span class="wrd-status" aria-live="polite" role="status"></span>'
              . '</div>';
+    }
+
+    protected function column_metal_232($item) {
+        $pid = (int)$item['id'];
+        $metal_id = 'wrd-232-' . $pid;
+        $value = $item['metal_232'];
+        return '<label class="screen-reader-text" for="' . esc_attr($metal_id) . '">' . esc_html__('Section 232 metal value in USD', 'woocommerce-us-duties') . '</label>'
+             . '<input type="number" id="' . esc_attr($metal_id) . '" class="wrd-232-metal" data-product="' . esc_attr($pid) . '" min="0" step="0.01" placeholder="' . esc_attr__('232 USD', 'woocommerce-us-duties') . '" value="' . esc_attr($value) . '" />';
     }
 
     public function get_status_counts(): array {
@@ -199,9 +209,12 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         }
 
         $warnings = $this->collect_warnings($product, $hs_code, $origin, $has_profile, $matched_profile);
+        $requires_232 = ($has_profile && $this->profile_requires_section_232($matched_profile));
+        $metal_232 = $this->get_effective_232_value_for_product($product);
+        $missing_232 = ($requires_232 && $metal_232 === null);
         $status_key = 'ready';
         $status_parts = [];
-        if ($missing_hs || $missing_origin) {
+        if ($missing_hs || $missing_origin || $missing_232) {
             $status_key = 'needs_data';
             if ($missing_hs) {
                 $status_parts[] = $this->render_status_badge(
@@ -215,6 +228,20 @@ class WRD_Reconciliation_Table extends WP_List_Table {
                     __('Origin Missing', 'woocommerce-us-duties'),
                     'critical',
                     __('No origin country is set. Enter a 2-letter country code in Origin and click Apply.', 'woocommerce-us-duties')
+                );
+            }
+            if ($missing_232) {
+                $status_parts[] = $this->render_status_badge(
+                    __('232 Metal Missing', 'woocommerce-us-duties'),
+                    'critical',
+                    __('Profile requires Section 232 metal value. Enter a per-product USD metal value and click Apply.', 'woocommerce-us-duties')
+                );
+            }
+            foreach ($warnings as $warning) {
+                $status_parts[] = $this->render_status_badge(
+                    $warning,
+                    'warning',
+                    $warning
                 );
             }
         } elseif (!$has_profile) {
@@ -261,6 +288,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'category_ids' => $this->resolve_category_ids($product),
             'hs_code' => $hs_code,
             'origin' => $origin,
+            'metal_232' => $metal_232 === null ? '' : (string) round((float) $metal_232, 2),
+            'requires_232' => $requires_232,
             'status_key' => $status_key,
             'status_html' => '<div class="wrd-status-badges">' . implode('', $status_parts) . '</div>',
         ];
@@ -294,50 +323,49 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             $warnings[] = __('Origin set to US; verify duty expectations', 'woocommerce-us-duties');
         }
 
-        if ($has_profile && is_array($matched_profile)) {
-            $udj = isset($matched_profile['us_duty_json']) ? $matched_profile['us_duty_json'] : null;
-            if (is_string($udj)) { $udj = json_decode($udj, true); }
-            $requires232 = false;
-            if (is_array($udj)) {
-                foreach (['postal', 'commercial'] as $channel) {
-                    if (!empty($udj[$channel]['components']) && is_array($udj[$channel]['components'])) {
-                        foreach ($udj[$channel]['components'] as $component) {
-                            if (!is_array($component)) { continue; }
-                            $code = sanitize_key((string)($component['code'] ?? ''));
-                            if (strpos($code, '232') !== false) { $requires232 = true; break 2; }
-                        }
-                    }
+        return array_values(array_unique($warnings));
+    }
+
+    private function profile_requires_section_232(?array $profile): bool {
+        if (!is_array($profile)) { return false; }
+        $udj = isset($profile['us_duty_json']) ? $profile['us_duty_json'] : null;
+        if (is_string($udj)) { $udj = json_decode($udj, true); }
+        if (!is_array($udj)) { return false; }
+        foreach (['postal', 'commercial'] as $channel) {
+            if (!empty($udj[$channel]['components']) && is_array($udj[$channel]['components'])) {
+                foreach ($udj[$channel]['components'] as $component) {
+                    if (!is_array($component)) { continue; }
+                    $code = sanitize_key((string)($component['code'] ?? ''));
+                    if (strpos($code, '232') !== false) { return true; }
                 }
             }
-            if ($requires232) {
-                $metal = null;
-                if ($product->is_type('variation')) {
-                    $mode = (string)$product->get_meta('_wrd_232_basis_mode', true);
-                    if ($mode !== 'none') {
-                        if ($mode === 'explicit') {
-                            $raw = $product->get_meta('_wrd_232_metal_value_usd', true);
-                            $metal = is_numeric($raw) ? (float)$raw : null;
-                        } else {
-                            $parent = wc_get_product($product->get_parent_id());
-                            if ($parent) {
-                                $raw = $parent->get_meta('_wrd_232_metal_value_usd', true);
-                                $metal = is_numeric($raw) ? (float)$raw : null;
-                            }
-                        }
-                    } else {
-                        $metal = 0.0;
-                    }
-                } else {
-                    $raw = $product->get_meta('_wrd_232_metal_value_usd', true);
-                    $metal = is_numeric($raw) ? (float)$raw : null;
-                }
-                if ($metal === null) {
-                    $warnings[] = __('Section 232 metal value missing', 'woocommerce-us-duties');
+            if (!empty($udj[$channel]['rates']) && (is_array($udj[$channel]['rates']) || is_object($udj[$channel]['rates']))) {
+                $rates = is_object($udj[$channel]['rates']) ? (array)$udj[$channel]['rates'] : $udj[$channel]['rates'];
+                foreach ($rates as $rateKey => $value) {
+                    if (is_numeric($value) && strpos(sanitize_key((string)$rateKey), '232') !== false) { return true; }
                 }
             }
         }
+        return false;
+    }
 
-        return array_values(array_unique($warnings));
+    private function get_effective_232_value_for_product(WC_Product $product): ?float {
+        if ($product->is_type('variation')) {
+            $mode = (string)$product->get_meta('_wrd_232_basis_mode', true);
+            if ($mode === 'none') { return 0.0; }
+            if ($mode === 'explicit') {
+                $raw = $product->get_meta('_wrd_232_metal_value_usd', true);
+                return is_numeric($raw) ? max(0.0, (float)$raw) : null;
+            }
+            $parent = wc_get_product($product->get_parent_id());
+            if ($parent) {
+                $raw = $parent->get_meta('_wrd_232_metal_value_usd', true);
+                return is_numeric($raw) ? max(0.0, (float)$raw) : null;
+            }
+            return null;
+        }
+        $raw = $product->get_meta('_wrd_232_metal_value_usd', true);
+        return is_numeric($raw) ? max(0.0, (float)$raw) : null;
     }
 
     private function resolve_source_bucket(WC_Product $product, array $effective): string {

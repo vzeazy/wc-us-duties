@@ -7,6 +7,18 @@
     return $.trim(value || '').toUpperCase();
   }
 
+  function normalizeMetal(value){
+    var raw = $.trim(value || '');
+    if (!raw) {
+      return '';
+    }
+    var parsed = parseFloat(raw);
+    if (!isFinite(parsed) || parsed < 0) {
+      return '';
+    }
+    return String(parsed);
+  }
+
   function getRowByProductId(productId){
     return $('input.wrd-reconcile-select[value="' + productId + '"]').closest('tr');
   }
@@ -41,25 +53,30 @@
     var $row = getRowByProductId(productId);
     var hs = normalizeHs($row.find('input.wrd-hs').val());
     var cc = normalizeCountryCode($row.find('input.wrd-cc').val());
+    var metal = normalizeMetal($row.find('input.wrd-232-metal').val());
     $row.find('input.wrd-cc').val(cc);
-    return { hs: hs, cc: cc };
+    $row.find('input.wrd-232-metal').val(metal);
+    return { hs: hs, cc: cc, metal: metal };
   }
 
-  function setRowBaseline($row, hs, cc){
+  function setRowBaseline($row, hs, cc, metal){
     $row.data('wrdInitialHs', normalizeHs(hs));
     $row.data('wrdInitialCc', normalizeCountryCode(cc));
+    $row.data('wrdInitialMetal', normalizeMetal(metal));
   }
 
   function syncRowApplyState($row){
     var hs = normalizeHs($row.find('input.wrd-hs').val());
     var cc = normalizeCountryCode($row.find('input.wrd-cc').val());
+    var metal = normalizeMetal($row.find('input.wrd-232-metal').val());
     $row.find('input.wrd-cc').val(cc);
+    $row.find('input.wrd-232-metal').val(metal);
 
     if (typeof $row.data('wrdInitialHs') === 'undefined'){
-      setRowBaseline($row, hs, cc);
+      setRowBaseline($row, hs, cc, metal);
     }
 
-    var changed = hs !== String($row.data('wrdInitialHs')) || cc !== String($row.data('wrdInitialCc'));
+    var changed = hs !== String($row.data('wrdInitialHs')) || cc !== String($row.data('wrdInitialCc')) || metal !== String($row.data('wrdInitialMetal'));
     var $button = $row.find('.wrd-apply');
     $button.toggleClass('is-idle', !changed);
     $button.prop('disabled', !changed);
@@ -80,6 +97,10 @@
       return WRDReconcile.i18n.invalidCountry;
     }
     return '';
+  }
+
+  function rowRequires232($row){
+    return String($row.find('.wrd-requires-232').val() || '') === '1';
   }
 
   function updateSelectedCount(){
@@ -114,6 +135,10 @@
       setRowStatus($row, validationError, 'error');
       return;
     }
+    if (rowRequires232($row) && values.metal === ''){
+      setRowStatus($row, WRDReconcile.i18n.missing232, 'error');
+      return;
+    }
 
     var $button = $row.find('.wrd-apply');
     $button.prop('disabled', true).addClass('updating-message');
@@ -124,10 +149,11 @@
       nonce: WRDReconcile.nonce,
       product_id: productId,
       hs_code: values.hs,
-      cc: values.cc
+      cc: values.cc,
+      metal_value_232: values.metal
     }).done(function(resp){
       if (resp && resp.success){
-        setRowBaseline($row, values.hs, values.cc);
+        setRowBaseline($row, values.hs, values.cc, values.metal);
         syncRowApplyState($row);
         setRowStatus($row, WRDReconcile.i18n.saved, 'success');
       } else {
@@ -154,7 +180,9 @@
 
     var hs = $.trim($('#wrd-reconcile-bulk-hs').val());
     var cc = normalizeCountryCode($('#wrd-reconcile-bulk-cc').val());
+    var metal = normalizeMetal($('#wrd-reconcile-bulk-metal').val());
     $('#wrd-reconcile-bulk-cc').val(cc);
+    $('#wrd-reconcile-bulk-metal').val(metal);
 
     var validationError = validateValues(hs, cc);
     if (validationError){
@@ -171,7 +199,8 @@
       nonce: WRDReconcile.nonce,
       product_ids: selected,
       hs_code: hs,
-      cc: cc
+      cc: cc,
+      metal_value_232: metal
     }).done(function(resp){
       if (resp && resp.success){
         setBulkStatus(WRDReconcile.i18n.bulkSaved.replace('%d', resp.data.updated || selected.length), 'success');
@@ -198,7 +227,7 @@
       }
     });
 
-    $(document).on('keydown', '.column-hs_code input.wrd-hs, .column-origin input.wrd-cc', function(event){
+    $(document).on('keydown', '.column-hs_code input.wrd-hs, .column-origin input.wrd-cc, .column-metal_232 input.wrd-232-metal', function(event){
       if (event.key === 'Enter'){
         event.preventDefault();
         var productId = parseInt($(this).data('product'), 10);
@@ -217,6 +246,10 @@
     });
 
     $(document).on('input', '.column-hs_code input.wrd-hs', function(){
+      syncRowApplyState($(this).closest('tr'));
+    });
+
+    $(document).on('input', '.column-metal_232 input.wrd-232-metal', function(){
       syncRowApplyState($(this).closest('tr'));
     });
 
