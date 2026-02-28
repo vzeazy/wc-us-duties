@@ -46,6 +46,16 @@ class WRD_Duty_Engine {
         return strpos(sanitize_key($code), '232') !== false;
     }
 
+    private static function effective_cusma_country_list(array $settings): array {
+        $list = array_filter(array_map('trim', explode(',', strtoupper((string)($settings['cusma_countries'] ?? 'CA,US')))));
+        foreach (['CA', 'US', 'MX'] as $required) {
+            if (!in_array($required, $list, true)) {
+                $list[] = $required;
+            }
+        }
+        return array_values(array_unique($list));
+    }
+
     private static function resolve_product_metal_value_usd(\WC_Product $product, float $qty = 1.0): ?float {
         $qty = max(1.0, $qty);
         $mode = 'inherit';
@@ -285,7 +295,7 @@ class WRD_Duty_Engine {
         }
         $settings = get_option(WRD_Settings::OPTION, []);
         $cusmaEnabled = !empty($settings['cusma_auto']);
-        $cusmaList = array_filter(array_map('trim', explode(',', strtoupper((string)($settings['cusma_countries'] ?? 'CA,US')))));
+        $cusmaList = self::effective_cusma_country_list($settings);
 
         $lines = [];
         $totalUsd = 0.0;
@@ -359,7 +369,7 @@ class WRD_Duty_Engine {
                 'cusma_enabled' => (bool)$cusmaEnabled,
                 'cusma_list' => $cusmaList,
                 'cusma_applied' => $isCusma,
-                'cusma_reason' => $isCusma ? (($dest === 'US' && in_array($origin, $cusmaList, true)) ? 'dest_in_list' : 'fta_flag') : 'none',
+                'cusma_reason' => $isCusma ? (($dest === 'US' && in_array(strtoupper((string)$origin), $cusmaList, true)) ? 'dest_in_list' : 'fta_flag') : 'none',
                 'profile_found' => (bool)$profile,
                 'channel_source' => $overrideData ? ($overrideData['source'] ?? 'map') : 'heuristic',
                 'method_id' => $overrideData['method_id'] ?? '',
@@ -481,7 +491,7 @@ class WRD_Duty_Engine {
         // CUSMA
         $isCusma = false;
         $cusmaEnabled = !empty($settings['cusma_auto']);
-        $cusmaList = array_filter(array_map('trim', explode(',', strtoupper((string)($settings['cusma_countries'] ?? 'CA,US')))));
+        $cusmaList = self::effective_cusma_country_list($settings);
         if ($dest === 'US' && $cusmaEnabled && in_array($origin, $cusmaList, true)) {
             $isCusma = true;
         } elseif ($dest === 'US' && $profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
