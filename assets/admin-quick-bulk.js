@@ -90,9 +90,8 @@
       if (onlyEmpty) changes.push(getI18n('only_empty', 'Only update empty fields'));
 
       if (!changes.length) {
-        alert(getI18n('no_actions', 'No bulk customs actions selected.'));
-        e.preventDefault();
-        return false;
+        // No customs fields were selected, so defer to WooCommerce's native bulk edit handling.
+        return true;
       }
 
       var message = getI18n('preview_prefix', 'About to update') + ' ' + selected + ' ' + getI18n('preview_suffix', 'products with:') + '\n- ' + changes.join('\n- ') + '\n\n' + getI18n('confirm', 'Continue?');

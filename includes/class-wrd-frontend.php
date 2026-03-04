@@ -208,6 +208,11 @@ class WRD_Frontend {
         if ((is_cart() && !$show_cart) || (is_checkout() && !$show_checkout)) {
             return $product_name;
         }
+        if (!empty($opt['us_only']) && WC()->customer) {
+            $dest = strtoupper((string)WC()->customer->get_shipping_country());
+            if ($dest === '' || $dest === 'XX') { $dest = strtoupper((string)WC()->customer->get_billing_country()); }
+            if ($dest !== 'US') { return $product_name; }
+        }
         $est = $this->get_estimate();
         if (empty($est['lines'])) { return $product_name; }
         $line = null;
