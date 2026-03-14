@@ -26,6 +26,14 @@
     return normalized === '' ? $.trim(value || '') : normalized;
   }
 
+  function normalizeStockStatus(value){
+    var stock = $.trim(value || '').toLowerCase();
+    if (stock === 'instock' || stock === 'outofstock' || stock === 'onbackorder'){
+      return stock;
+    }
+    return '';
+  }
+
   function getRowByProductId(productId){
     return $('input.wrd-reconcile-select[value="' + productId + '"]').closest('tr');
   }
@@ -308,6 +316,7 @@
     var hs = $.trim($('#wrd-reconcile-bulk-hs').val());
     var cc = normalizeCountryCode($('#wrd-reconcile-bulk-cc').val());
     var metal = normalizeMetal($('#wrd-reconcile-bulk-metal').val());
+    var stock = normalizeStockStatus($('#wrd-reconcile-bulk-stock').val());
     var profileId = parseInt($('#wrd-reconcile-bulk-profile-id').val(), 10) || 0;
     var requires232 = String($('#wrd-reconcile-bulk-requires-232').val() || '') === '1';
     $('#wrd-reconcile-bulk-cc').val(cc);
@@ -317,10 +326,21 @@
       return;
     }
 
-    var validationError = validateValues(hs, cc);
-    if (validationError){
-      setBulkStatus(validationError, 'error');
-      return;
+    if (action === 'set_values'){
+      if ((hs && !cc) || (!hs && cc)){
+        setBulkStatus(validateValues(hs, cc), 'error');
+        return;
+      }
+      if (!hs && !cc && metal === '' && stock === ''){
+        setBulkStatus(WRDReconcile.i18n.bulkValueRequired, 'error');
+        return;
+      }
+    } else {
+      var validationError = validateValues(hs, cc);
+      if (validationError){
+        setBulkStatus(validationError, 'error');
+        return;
+      }
     }
     if (requires232 && metal === ''){
       setBulkStatus(WRDReconcile.i18n.missing232, 'error');
@@ -338,7 +358,8 @@
       hs_code: hs,
       cc: cc,
       profile_id: profileId,
-      metal_value_232: metal
+      metal_value_232: metal,
+      stock_status: stock
     }).done(function(resp){
       if (resp && resp.success){
         setBulkStatus(WRDReconcile.i18n.bulkSaved.replace('%d', resp.data.updated || selected.length), 'success');

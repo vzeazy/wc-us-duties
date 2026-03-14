@@ -65,6 +65,7 @@ class WRD_Admin {
         add_action('wp_ajax_wrd_reconcile_assign_bulk', [$this, 'ajax_reconcile_assign_bulk']);
         add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
         add_action('wp_ajax_wrd_quick_assign_profile', [$this, 'ajax_quick_assign_profile']);
+        add_action('wp_ajax_wrd_update_profile_description', [$this, 'ajax_update_profile_description']);
         add_action('admin_footer', [$this, 'render_inline_assign_template']);
 
         // Redirect legacy admin page slugs
@@ -551,11 +552,19 @@ class WRD_Admin {
             #wrd-profiles-form .tablenav.top {
                 margin-top: 0;
             }
+            #wrd-profiles-form .column-description_raw {
+                width: 42%;
+            }
+            #wrd-profiles-form .column-country_code {
+                width: 76px;
+            }
             #wrd-profiles-form .column-active {
-                width: 170px;
+                width: 220px;
+                white-space: nowrap;
             }
             #wrd-profiles-form .column-notes {
-                width: 28%;
+                width: 52px;
+                text-align: center;
             }
             #wrd-profiles-form .wrd-status-pill {
                 display: inline-flex;
@@ -583,20 +592,89 @@ class WRD_Admin {
                 color: #b42318;
                 border-color: #ffc9c5;
             }
-            #wrd-profiles-form .wrd-cell-meta {
-                display: block;
-                margin-top: 4px;
+            #wrd-profiles-form .wrd-active-summary {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                max-width: 100%;
+            }
+            #wrd-profiles-form .wrd-active-meta {
                 font-size: 11px;
                 color: #646970;
-                line-height: 1.3;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-            #wrd-profiles-form .wrd-cell-empty {
-                color: #8c8f94;
+            #wrd-profiles-form .column-description_raw {
+                vertical-align: top;
             }
-            #wrd-profiles-form .wrd-notes-snippet {
+            #wrd-profiles-form .wrd-description-cell {
+                min-width: 360px;
+            }
+            #wrd-profiles-form .wrd-description-input {
                 display: block;
-                color: #1d2327;
-                line-height: 1.4;
+                width: 100%;
+                min-height: 70px;
+                resize: vertical;
+                line-height: 1.45;
+            }
+            #wrd-profiles-form .wrd-description-actions {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                min-height: 26px;
+                margin-top: 6px;
+            }
+            #wrd-profiles-form .wrd-description-reset.is-hidden {
+                display: none;
+            }
+            #wrd-profiles-form .wrd-description-status {
+                font-size: 11px;
+                color: #646970;
+            }
+            #wrd-profiles-form .wrd-description-status.is-error {
+                color: #b32d2e;
+            }
+            #wrd-profiles-form .wrd-description-status.is-success {
+                color: #008a20;
+            }
+            #wrd-profiles-form .wrd-notes-indicator {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                color: #50575e;
+                cursor: help;
+            }
+            #wrd-profiles-form .wrd-notes-indicator .dashicons {
+                width: 18px;
+                height: 18px;
+                font-size: 18px;
+            }
+            #wrd-profiles-form .wrd-notes-popover {
+                position: absolute;
+                z-index: 20;
+                left: 24px;
+                top: 50%;
+                transform: translateY(-50%);
+                display: none;
+                min-width: 220px;
+                max-width: 360px;
+                padding: 8px 10px;
+                border: 1px solid #dcdcde;
+                border-radius: 4px;
+                background: #1d2327;
+                color: #fff;
+                text-align: left;
+                line-height: 1.45;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            }
+            #wrd-profiles-form .wrd-notes-indicator:hover .wrd-notes-popover,
+            #wrd-profiles-form .wrd-notes-indicator:focus .wrd-notes-popover,
+            #wrd-profiles-form .wrd-notes-indicator:focus-within .wrd-notes-popover {
+                display: block;
             }
         </style>';
         echo '<form method="post" id="wrd-profiles-form" data-wrd-bulk-form="1">';
@@ -618,6 +696,7 @@ class WRD_Admin {
         // Enqueue bulk edit assets
         wp_enqueue_style('wrd-bulk-edit', WRD_US_DUTY_URL . 'assets/admin-bulk-edit.css', [], WRD_US_DUTY_VERSION);
         wp_enqueue_script('wrd-bulk-edit', WRD_US_DUTY_URL . 'assets/admin-bulk-edit.js', ['jquery', 'jquery-ui-autocomplete'], WRD_US_DUTY_VERSION, true);
+        wp_enqueue_script('wrd-admin-profiles-table', WRD_US_DUTY_URL . 'assets/admin-profiles-table.js', ['jquery'], WRD_US_DUTY_VERSION, true);
         wp_localize_script('wrd-bulk-edit', 'wrdBulkEdit', [
             'nonce' => wp_create_nonce('wrd_bulk_edit_nonce'),
             'strings' => [
@@ -630,6 +709,16 @@ class WRD_Admin {
                 'invalid_rate' => __('Please enter a valid rate between 0 and 100.', 'woocommerce-us-duties'),
                 'enter_notes' => __('Please enter notes text for the selected action.', 'woocommerce-us-duties'),
             ]
+        ]);
+        wp_localize_script('wrd-admin-profiles-table', 'WRDProfilesTable', [
+            'ajax' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('wrd_update_profile_description'),
+            'i18n' => [
+                'saving' => __('Saving...', 'woocommerce-us-duties'),
+                'saved' => __('Saved', 'woocommerce-us-duties'),
+                'error' => __('Save failed', 'woocommerce-us-duties'),
+                'unchanged' => __('No changes to save.', 'woocommerce-us-duties'),
+            ],
         ]);
     }
 
@@ -2944,6 +3033,43 @@ class WRD_Admin {
         ]);
     }
 
+    public function ajax_update_profile_description() {
+        check_ajax_referer('wrd_update_profile_description', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => 'Unauthorized'], 403);
+        }
+
+        $profile_id = isset($_POST['profile_id']) ? absint(wp_unslash($_POST['profile_id'])) : 0;
+        $description = isset($_POST['description']) ? wp_kses_post(wp_unslash($_POST['description'])) : '';
+
+        if ($profile_id <= 0) {
+            wp_send_json_error(['message' => 'Invalid duty rule ID'], 400);
+        }
+
+        global $wpdb;
+        $table = WRD_DB::table_profiles();
+        $updated = $wpdb->update(
+            $table,
+            [
+                'description_raw' => $description,
+                'description_normalized' => WRD_DB::normalize_description($description),
+            ],
+            ['id' => $profile_id],
+            ['%s', '%s'],
+            ['%d']
+        );
+
+        if ($updated === false) {
+            wp_send_json_error(['message' => 'Unable to update description'], 500);
+        }
+
+        wp_send_json_success([
+            'profile_id' => $profile_id,
+            'description' => $description,
+        ]);
+    }
+
     /**
      * Canonical write path for product/variation customs data.
      * Supported keys in $changes: hs_code, origin, desc, metal_value_232, metal_mode_232, manufacturer_mid.
@@ -2992,8 +3118,19 @@ class WRD_Admin {
                 $product->update_meta_data('_wrd_manufacturer_mid', $mid);
             }
         }
+        $stock_status = null;
+        if (array_key_exists('stock_status', $changes)) {
+            $candidate_stock_status = sanitize_key((string) $changes['stock_status']);
+            if (in_array($candidate_stock_status, ['instock', 'outofstock', 'onbackorder'], true)) {
+                $stock_status = $candidate_stock_status;
+            }
+        }
 
         $product->save();
+
+        if ($stock_status !== null && function_exists('wc_update_product_stock_status')) {
+            wc_update_product_stock_status($product->get_id(), $stock_status);
+        }
 
         if ($product->is_type('variation')) {
             self::update_normalized_meta_for_variation((int) $product->get_id());
@@ -3367,6 +3504,7 @@ class WRD_Admin {
                         'invalidCountry' => __('Origin must be a 2-letter country code.', 'woocommerce-us-duties'),
                         'chooseRule' => __('Choose a saved duty rule first.', 'woocommerce-us-duties'),
                         'actionRequired' => __('Choose a bulk action first.', 'woocommerce-us-duties'),
+                        'bulkValueRequired' => __('Enter at least one bulk value to apply.', 'woocommerce-us-duties'),
                         'ruleNotFound' => __('The selected saved duty rule could not be found. Please choose it again.', 'woocommerce-us-duties'),
                         'saving' => __('Saving...', 'woocommerce-us-duties'),
                         'saved' => __('Saved', 'woocommerce-us-duties'),
@@ -3532,14 +3670,34 @@ class WRD_Admin {
         $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
         $profile_id = isset($_POST['profile_id']) ? (int) $_POST['profile_id'] : 0;
         $metal_232 = isset($_POST['metal_value_232']) ? trim(sanitize_text_field(wp_unslash($_POST['metal_value_232']))) : null;
+        $stock_status = isset($_POST['stock_status']) ? sanitize_key(wp_unslash($_POST['stock_status'])) : '';
+        if (!in_array($stock_status, ['', 'instock', 'outofstock', 'onbackorder'], true)) {
+            $stock_status = '';
+        }
 
         if (empty($product_ids)) {
             wp_send_json_error(['message' => 'invalid_params'], 400);
         }
-        $resolved = $this->resolve_reconciliation_profile_input($profile_id, $hs_code, $cc);
-        if (empty($resolved['valid'])) {
-            $code = ($resolved['error'] ?? 'invalid_params') === 'rule_not_found' ? 404 : 400;
-            wp_send_json_error(['message' => $resolved['error'] ?? 'invalid_params'], $code);
+        $changes_template = [];
+        $resolved = null;
+
+        if ($profile_id > 0 || $hs_code !== '' || $cc !== '') {
+            $resolved = $this->resolve_reconciliation_profile_input($profile_id, $hs_code, $cc);
+            if (empty($resolved['valid'])) {
+                $code = ($resolved['error'] ?? 'invalid_params') === 'rule_not_found' ? 404 : 400;
+                wp_send_json_error(['message' => $resolved['error'] ?? 'invalid_params'], $code);
+            }
+            $changes_template['hs_code'] = (string) $resolved['hs_code'];
+            $changes_template['origin'] = (string) $resolved['cc'];
+        }
+        if ($metal_232 !== null && $metal_232 !== '') {
+            $changes_template['metal_value_232'] = $metal_232;
+        }
+        if ($stock_status !== '') {
+            $changes_template['stock_status'] = $stock_status;
+        }
+        if (empty($changes_template)) {
+            wp_send_json_error(['message' => 'invalid_params'], 400);
         }
 
         $updated = 0;
@@ -3550,24 +3708,18 @@ class WRD_Admin {
                 $skipped++;
                 continue;
             }
-            $changes = [
-                'hs_code' => (string) $resolved['hs_code'],
-                'origin' => (string) $resolved['cc'],
-            ];
-            if ($metal_232 !== null && $metal_232 !== '') {
-                $changes['metal_value_232'] = $metal_232;
-            }
-            self::upsert_product_classification($pid, $changes);
+            self::upsert_product_classification($pid, $changes_template);
             $updated++;
         }
 
         wp_send_json_success([
             'updated' => $updated,
             'skipped' => $skipped,
-            'hs_code' => (string) $resolved['hs_code'],
-            'cc' => (string) $resolved['cc'],
+            'hs_code' => (string) ($resolved['hs_code'] ?? ''),
+            'cc' => (string) ($resolved['cc'] ?? ''),
             'profile_id' => (int) ($resolved['profile_id'] ?? 0),
             'requires_232' => !empty($resolved['profile']) && $this->profile_has_section_232($resolved['profile']),
+            'stock_status' => $stock_status,
         ]);
     }
 
@@ -5025,6 +5177,12 @@ class WRD_Admin {
                 $stock_filter_options[$stock_key] = __('Out of stock', 'woocommerce-us-duties');
             }
         }
+        $bulk_stock_options = [
+            '' => __('No change', 'woocommerce-us-duties'),
+        ];
+        foreach (['instock', 'outofstock', 'onbackorder'] as $stock_key) {
+            $bulk_stock_options[$stock_key] = $stock_filter_options[$stock_key];
+        }
 
         $tab_defs = [
             'needs_data' => __('Needs Data', 'woocommerce-us-duties'),
@@ -5180,6 +5338,11 @@ class WRD_Admin {
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk HS', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Stock', 'woocommerce-us-duties') . '</span><select id="wrd-reconcile-bulk-stock">';
+        foreach ($bulk_stock_options as $key => $label) {
+            printf('<option value="%s">%s</option>', esc_attr($key), esc_html($label));
+        }
+        echo '</select></label>';
         echo '</div>';
         echo '<div class="wrd-reconcile-inline-actions"><span class="wrd-reconcile-selected-count">' . sprintf(esc_html__('%s selected', 'woocommerce-us-duties'), '<strong>0</strong>') . '</span><button type="button" id="wrd-reconcile-bulk-apply" class="button button-primary">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button><span class="wrd-reconcile-bulk-status" aria-live="polite" role="status"></span></div>';
         echo '</div>';

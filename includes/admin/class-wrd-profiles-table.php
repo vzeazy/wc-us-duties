@@ -76,8 +76,7 @@ class WRD_Profiles_Table extends WP_List_Table {
             'action' => 'edit',
             'id' => $item['id'],
         ], admin_url('admin.php'));
-        $title = esc_html($item['description_raw']);
-        $cc = esc_html($item['country_code']);
+        $description = (string) ($item['description_raw'] ?? '');
         $cloneUrl = add_query_arg([
             'page' => 'wrd-customs',
             'tab' => 'profiles',
@@ -88,7 +87,24 @@ class WRD_Profiles_Table extends WP_List_Table {
             'edit' => sprintf('<a href="%s">%s</a>', esc_url($editUrl), __('Edit', 'woocommerce-us-duties')),
             'clone' => sprintf('<a href="%s">%s</a>', esc_url($cloneUrl), __('Clone', 'woocommerce-us-duties')),
         ];
-        return sprintf('<strong><a href="%s">%s</a></strong> <span class="description">| %s</span> %s', esc_url($editUrl), $title, $cc, $this->row_actions($actions));
+        return sprintf(
+            '<div class="wrd-description-cell" data-profile-id="%1$d">'
+            . '<label class="screen-reader-text" for="wrd-description-%1$d">%2$s</label>'
+            . '<textarea id="wrd-description-%1$d" class="wrd-description-input" rows="3" data-initial="%3$s">%4$s</textarea>'
+            . '<div class="wrd-description-actions">'
+            . '<button type="button" class="button button-small button-primary wrd-description-save" disabled>%5$s</button>'
+            . '<button type="button" class="button button-small wrd-description-reset is-hidden">%6$s</button>'
+            . '<span class="wrd-description-status" aria-live="polite" role="status"></span>'
+            . '</div>'
+            . '</div>%7$s',
+            (int) $item['id'],
+            esc_attr__('Description', 'woocommerce-us-duties'),
+            esc_attr($description),
+            esc_textarea($description),
+            esc_html__('Save', 'woocommerce-us-duties'),
+            esc_html__('Reset', 'woocommerce-us-duties'),
+            $this->row_actions($actions)
+        );
     }
 
     protected function column_products($item) {
@@ -109,31 +125,23 @@ class WRD_Profiles_Table extends WP_List_Table {
 
     protected function column_active($item) {
         $status = $this->get_active_status_meta($item);
-        $pill = sprintf(
-            '<span class="wrd-status-pill wrd-status-pill--%1$s">%2$s</span>',
-            esc_attr($status['state']),
-            esc_html($status['label'])
-        );
-        if ($status['meta'] === '') {
-            return $pill;
-        }
-        return $pill . '<span class="wrd-cell-meta">' . esc_html($status['meta']) . '</span>';
+        $pill = sprintf('<span class="wrd-status-pill wrd-status-pill--%1$s">%2$s</span>', esc_attr($status['state']), esc_html($status['label']));
+        if ($status['meta'] === '') { return '<span class="wrd-active-summary">' . $pill . '</span>'; }
+        return '<span class="wrd-active-summary">' . $pill . '<span class="wrd-active-meta">' . esc_html($status['meta']) . '</span></span>';
     }
 
     protected function column_notes($item) {
         $notes = trim((string)($item['notes'] ?? ''));
         if ($notes === '') {
-            return '<span class="wrd-cell-empty">—</span>';
+            return '';
         }
-
-        $singleLine = preg_replace('/\s+/', ' ', $notes);
-        $singleLine = is_string($singleLine) ? trim($singleLine) : $notes;
-        $snippet = wp_html_excerpt($singleLine, 100, '…');
-
         return sprintf(
-            '<span class="wrd-notes-snippet" title="%1$s">%2$s</span>',
-            esc_attr($notes),
-            esc_html($snippet)
+            '<span class="wrd-notes-indicator" tabindex="0" aria-label="%1$s">'
+            . '<span class="dashicons dashicons-media-text" aria-hidden="true"></span>'
+            . '<span class="wrd-notes-popover">%2$s</span>'
+            . '</span>',
+            esc_attr__('View note', 'woocommerce-us-duties'),
+            nl2br(esc_html($notes))
         );
     }
 
@@ -162,7 +170,7 @@ class WRD_Profiles_Table extends WP_List_Table {
             return [
                 'state' => 'active',
                 'label' => __('Active', 'woocommerce-us-duties'),
-                'meta' => sprintf(__('Active %1$s to %2$s', 'woocommerce-us-duties'), $from, $to),
+                'meta' => sprintf(__('%1$s to %2$s', 'woocommerce-us-duties'), $from, $to),
             ];
         }
 
