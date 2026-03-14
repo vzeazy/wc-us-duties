@@ -5088,11 +5088,16 @@ class WRD_Admin {
             .wrd-reconcile-selected-count { color: #646970; }
             .wrd-reconcile-bulk-status { min-height: 20px; display: inline-flex; align-items: center; color: #646970; font-size: 12px; min-width: 0; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .wrd-reconcile-help { margin: 0; color: #646970; font-size: 12px; }
-            .wrd-rule-lookup { width: 100%; min-width: 0; }
-            .wrd-row-actions { display: flex; flex-direction: column; flex-wrap: wrap; align-items: stretch; gap: 4px; min-width: 220px; }
+            .wrd-row-actions { display: flex; flex-direction: column; flex-wrap: wrap; align-items: stretch; gap: 4px; min-width: 0; }
             .wrd-row-actions-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
             .wrd-row-actions .wrd-status { min-width: 40px; }
-            .ui-autocomplete { z-index: 100000 !important; max-height: 260px; overflow-y: auto; overflow-x: hidden; border: 1px solid #c3c4c7; background: #fff; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12); }
+            .wrd-reconcile-rule-popover { position: absolute; z-index: 100001; width: min(420px, calc(100vw - 32px)); background: #fff; border: 1px solid #c3c4c7; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); border-radius: 6px; padding: 12px; display: none; }
+            .wrd-reconcile-rule-popover.is-open { display: block; }
+            .wrd-reconcile-rule-popover-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #1d2327; }
+            .wrd-reconcile-rule-popover input[type="text"] { width: 100%; margin: 0; }
+            .wrd-reconcile-rule-popover-help { margin: 8px 0 0; color: #646970; font-size: 12px; }
+            .wrd-reconcile-rule-popover-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
+            .ui-autocomplete { z-index: 100002 !important; max-height: 260px; overflow-y: auto; overflow-x: hidden; border: 1px solid #c3c4c7; background: #fff; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12); }
             .ui-menu .ui-menu-item-wrapper { padding: 8px 10px; }
             .wrd-reconcile-table .tablenav.top { margin: 0; padding: 6px 10px; border-bottom: 1px solid #dcdcde; }
             .wrd-reconcile-table .tablenav.bottom { display: none; }
@@ -5173,6 +5178,13 @@ class WRD_Admin {
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';
         echo '</div>';
         echo '<div class="wrd-reconcile-inline-actions"><span class="wrd-reconcile-selected-count">' . sprintf(esc_html__('%s selected', 'woocommerce-us-duties'), '<strong>0</strong>') . '</span><button type="button" id="wrd-reconcile-bulk-apply" class="button button-primary">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button><span class="wrd-reconcile-bulk-status" aria-live="polite" role="status"></span></div>';
+        echo '</div>';
+        echo '<div id="wrd-reconcile-rule-popover" class="wrd-reconcile-rule-popover" aria-hidden="true">';
+        echo '<p class="wrd-reconcile-rule-popover-title">' . esc_html__('Copy From Saved Rule', 'woocommerce-us-duties') . '</p>';
+        echo '<label class="screen-reader-text" for="wrd-reconcile-row-rule">' . esc_html__('Saved rule lookup', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" id="wrd-reconcile-row-rule" placeholder="' . esc_attr__('Type to search saved rules', 'woocommerce-us-duties') . '" />';
+        echo '<p class="wrd-reconcile-rule-popover-help">' . esc_html__('Choose a saved rule to fill HS code and origin for this row.', 'woocommerce-us-duties') . '</p>';
+        echo '<div class="wrd-reconcile-rule-popover-actions"><button type="button" class="button" id="wrd-reconcile-rule-close">' . esc_html__('Close', 'woocommerce-us-duties') . '</button></div>';
         echo '</div>';
         echo '<div class="wrd-reconcile-table">';
         $table->prepare_items();

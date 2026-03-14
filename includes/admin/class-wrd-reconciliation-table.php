@@ -103,11 +103,9 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     protected function column_assign($item) {
         $pid = (int) $item['id'];
         return '<div class="wrd-row-actions" data-product="' . esc_attr($pid) . '">'
-             . '<label class="screen-reader-text" for="wrd-rule-' . esc_attr($pid) . '">' . esc_html__('Saved rule lookup', 'woocommerce-us-duties') . '</label>'
-             . '<input type="text" id="wrd-rule-' . esc_attr($pid) . '" class="wrd-rule-lookup" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('Search saved rule (type to search)', 'woocommerce-us-duties') . '" />'
              . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
              . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
-             . '<div class="wrd-row-actions-footer"><button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
+             . '<div class="wrd-row-actions-footer"><button type="button" class="button button-secondary button-small wrd-rule-picker-toggle" data-product="' . esc_attr($pid) . '">' . esc_html__('Saved Rule', 'woocommerce-us-duties') . '</button><button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
              . '<span class="wrd-status" aria-live="polite" role="status"></span></div>'
              . '</div>';
     }
@@ -510,10 +508,12 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     private function render_stock_status_badge(string $stock_status_key, string $label): string {
         $short_label = $this->get_stock_status_short_label($stock_status_key);
 
-        return '<span class="wrd-stock-badge wrd-stock-badge-' . esc_attr($stock_status_key) . '" title="' . esc_attr($label) . '" aria-label="' . esc_attr($label) . '">'
-            . '<span class="wrd-stock-badge-dot" aria-hidden="true"></span>'
-            . '<span class="wrd-stock-badge-text" aria-hidden="true">' . esc_html($short_label) . '</span>'
-            . '</span>';
+        return '<div class="wrd-status-badges wrd-status-badges-stock">'
+            . '<span class="wrd-status-badge wrd-status-badge-stock wrd-status-badge-stock-' . esc_attr($stock_status_key) . '" title="' . esc_attr($label) . '" aria-label="' . esc_attr($label) . '">'
+            . '<span class="wrd-status-badge-dot" aria-hidden="true"></span>'
+            . '<span class="wrd-status-badge-text" aria-hidden="true">' . esc_html($short_label) . '</span>'
+            . '</span>'
+            . '</div>';
     }
 
     private function get_stock_status_short_label(string $stock_status_key): string {

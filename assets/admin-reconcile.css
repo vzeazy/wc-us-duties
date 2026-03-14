@@ -62,16 +62,8 @@
 
 .wp-list-table .column-assign .wrd-row-actions {
     display: flex;
-    flex-direction: column;
-    flex-wrap: wrap;
-    align-items: stretch;
+    align-items: center;
     gap: 4px;
-    min-width: 220px;
-}
-
-.wp-list-table .column-assign input.wrd-rule-lookup {
-    width: 100%;
-    min-width: 0;
 }
 
 .wp-list-table .column-assign .wrd-row-actions-footer {
@@ -81,8 +73,24 @@
     flex-wrap: wrap;
 }
 
+.wrd-reconcile-rule-popover {
+    position: absolute;
+    z-index: 100001;
+    width: min(420px, calc(100vw - 32px));
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    padding: 12px;
+    display: none;
+}
+
+.wrd-reconcile-rule-popover.is-open {
+    display: block;
+}
+
 .ui-autocomplete {
-    z-index: 100000 !important;
+    z-index: 100002 !important;
     max-height: 260px;
     overflow-y: auto;
     overflow-x: hidden;
@@ -116,7 +124,13 @@
     color: #b32d2e;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge {
+.wp-list-table .column-stock_status .wrd-status-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.wp-list-table .column-stock_status .wrd-status-badge-stock {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -131,7 +145,7 @@
     white-space: nowrap;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge-dot {
+.wp-list-table .column-stock_status .wrd-status-badge-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
@@ -139,29 +153,29 @@
     flex: 0 0 7px;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge-text {
+.wp-list-table .column-stock_status .wrd-status-badge-text {
     letter-spacing: 0.01em;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge-instock {
+.wp-list-table .column-stock_status .wrd-status-badge-stock-instock {
     background: #f0f8f1;
     border-color: #bddfc4;
     color: #0f5f2f;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge-outofstock {
+.wp-list-table .column-stock_status .wrd-status-badge-stock-outofstock {
     background: #fff6f7;
     border-color: #f0c8cc;
     color: #8a2424;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge-onbackorder {
+.wp-list-table .column-stock_status .wrd-status-badge-stock-onbackorder {
     background: #fff9f0;
     border-color: #efd8aa;
     color: #7a5f00;
 }
 
-.wp-list-table .column-stock_status .wrd-stock-badge-unknown {
+.wp-list-table .column-stock_status .wrd-status-badge-stock-unknown {
     background: #f6f7f7;
     border-color: #dcdcde;
     color: #646970;
