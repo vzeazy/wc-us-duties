@@ -79,8 +79,8 @@ class WRD_Admin {
         echo '<div class="options_group wrd-customs-fields">';
 
         echo '<p class="form-field">';
-        echo '<label>' . esc_html__('Profile Lookup', 'woocommerce-us-duties') . '</label>';
-        echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search profiles...', 'woocommerce-us-duties') . '" />';
+        echo '<label>' . esc_html__('Duty Rule Lookup', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search duty rules...', 'woocommerce-us-duties') . '" />';
         echo '<span class="description">' . esc_html__('Search by HS code, country, or description to auto-populate fields below.', 'woocommerce-us-duties') . '</span>';
         echo '</p>';
 
@@ -155,8 +155,8 @@ class WRD_Admin {
 
         // Profile lookup for variation
         echo '<p class="form-row form-row-full">';
-        echo '<label>' . esc_html__('Profile Lookup', 'woocommerce-us-duties') . '</label>';
-        echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search profiles...', 'woocommerce-us-duties') . '" />';
+        echo '<label>' . esc_html__('Duty Rule Lookup', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" class="wrd-profile-lookup short" placeholder="' . esc_attr__('Search duty rules...', 'woocommerce-us-duties') . '" />';
         echo '</p>';
 
         woocommerce_wp_text_input([
@@ -238,7 +238,7 @@ class WRD_Admin {
         // Behavior on missing profiles
         $missingBehavior = $settings['missing_profile_behavior'] ?? 'fallback';
         if ($missing > 0 && $missingBehavior === 'block') {
-            wc_add_notice(__('We cannot complete checkout: missing customs profile for one or more items.', 'woocommerce-us-duties'), 'error');
+            wc_add_notice(__('We cannot complete checkout: a duty rule is missing for one or more items.', 'woocommerce-us-duties'), 'error');
             return;
         }
 
@@ -410,9 +410,9 @@ class WRD_Admin {
         // Debug info (collapsible)
         if (isset($snapshot['missing_profiles']) && $snapshot['missing_profiles'] > 0) {
             echo '<details style="margin-top: 12px;">';
-            echo '<summary style="cursor: pointer; color: #d63638; padding: 8px 0;"><strong>⚠ ' . esc_html__('Missing Profiles', 'woocommerce-us-duties') . '</strong></summary>';
+            echo '<summary style="cursor: pointer; color: #d63638; padding: 8px 0;"><strong>⚠ ' . esc_html__('Missing Duty Rules', 'woocommerce-us-duties') . '</strong></summary>';
             echo '<div style="padding: 8px; background: #fcf0f1; border-left: 4px solid #d63638; margin-top: 4px;">';
-            echo '<p style="margin: 0;">' . sprintf(esc_html__('%d product(s) did not have matching duty profiles.', 'woocommerce-us-duties'), (int) $snapshot['missing_profiles']) . '</p>';
+            echo '<p style="margin: 0;">' . sprintf(esc_html__('%d product(s) did not have matching duty rules.', 'woocommerce-us-duties'), (int) $snapshot['missing_profiles']) . '</p>';
             echo '</div>';
             echo '</details>';
         }
@@ -463,7 +463,7 @@ class WRD_Admin {
             $active = 'section_232';
         }
         $tabs = [
-            'profiles' => __('Profiles', 'woocommerce-us-duties'),
+            'profiles' => __('Duty Rules', 'woocommerce-us-duties'),
             'reconcile' => __('Reconciliation', 'woocommerce-us-duties'),
             'section_232' => __('Section 232', 'woocommerce-us-duties'),
             'import' => __('Import/Export', 'woocommerce-us-duties'),
@@ -504,7 +504,7 @@ class WRD_Admin {
             // Handle save
             if (!empty($_POST['wrd_profile_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['wrd_profile_nonce'])), 'wrd_save_profile')) {
                 $this->save_profile_from_post();
-                echo '<div class="updated"><p>' . esc_html__('Profile saved.', 'woocommerce-us-duties') . '</p></div>';
+                echo '<div class="updated"><p>' . esc_html__('Duty rule saved.', 'woocommerce-us-duties') . '</p></div>';
             }
             $this->render_profile_form();
             return;
@@ -608,7 +608,7 @@ class WRD_Admin {
         echo '<a href="' . esc_url($newUrl) . '" class="button button-primary">' . esc_html__('Add New', 'woocommerce-us-duties') . '</a>';
         echo '<a href="' . esc_url($exportUrl) . '" class="button">' . esc_html__('Export CSV', 'woocommerce-us-duties') . '</a>';
         echo '</div>';
-        $table->search_box(__('Search Profiles', 'woocommerce-us-duties'), 'wrd_profiles');
+        $table->search_box(__('Search Duty Rules', 'woocommerce-us-duties'), 'wrd_profiles');
         echo '</div>';
         // WooCommerce-style bulk edit panel
         $this->render_bulk_edit_panel();
@@ -621,7 +621,7 @@ class WRD_Admin {
         wp_localize_script('wrd-bulk-edit', 'wrdBulkEdit', [
             'nonce' => wp_create_nonce('wrd_bulk_edit_nonce'),
             'strings' => [
-                'confirm_delete' => __('Are you sure you want to delete the selected profiles?', 'woocommerce-us-duties'),
+                'confirm_delete' => __('Are you sure you want to delete the selected duty rules?', 'woocommerce-us-duties'),
                 'no_items_selected' => __('Please select items to perform bulk actions.', 'woocommerce-us-duties'),
                 'processing' => __('Processing...', 'woocommerce-us-duties'),
                 'select_action' => __('Please select at least one bulk action to perform.', 'woocommerce-us-duties'),
@@ -639,7 +639,7 @@ class WRD_Admin {
             <div class="alignleft actions bulkactions">
                 <div class="bulk-edit-fields">
                     <fieldset class="inline-edit-col-left">
-                        <legend class="inline-edit-legend"><?php esc_html_e('Bulk Edit Profiles', 'woocommerce-us-duties'); ?></legend>
+                        <legend class="inline-edit-legend"><?php esc_html_e('Bulk Edit Duty Rules', 'woocommerce-us-duties'); ?></legend>
                         <div class="inline-edit-col">
                             <label class="alignleft">
                                 <span class="title"><?php esc_html_e('Effective From', 'woocommerce-us-duties'); ?></span>
@@ -741,7 +741,7 @@ class WRD_Admin {
                 $notices[] = [
                     'class' => 'notice notice-info',
                     'message' => sprintf(
-                        __('Profiles CSV: %1$d rows, %2$d inserted, %3$d updated, %4$d skipped, %5$d errors. (dry-run: %6$s)', 'woocommerce-us-duties'),
+                        __('Duty Rules CSV: %1$d rows, %2$d inserted, %3$d updated, %4$d skipped, %5$d errors. (dry-run: %6$s)', 'woocommerce-us-duties'),
                         (int) ($summary['rows'] ?? 0),
                         (int) ($summary['inserted'] ?? 0),
                         (int) ($summary['updated'] ?? 0),
@@ -754,7 +754,7 @@ class WRD_Admin {
             } else {
                 $notices[] = [
                     'class' => 'notice notice-success',
-                    'message' => __('Profiles CSV import completed.', 'woocommerce-us-duties'),
+                    'message' => __('Duty Rules CSV import completed.', 'woocommerce-us-duties'),
                     'details' => '',
                 ];
             }
@@ -784,7 +784,7 @@ class WRD_Admin {
                 $notices[] = [
                     'class' => 'notice notice-success',
                     'message' => sprintf(
-                        __('Cleanup: %1$d duplicates found, %2$d merged, %3$d products reassigned, %4$d profiles deleted. (dry-run: %5$s)', 'woocommerce-us-duties'),
+                    __('Cleanup: %1$d duplicate duty rule groups found, %2$d merged, %3$d products reassigned, %4$d duty rules deleted. (dry-run: %5$s)', 'woocommerce-us-duties'),
                         (int) ($cleanup_summary['duplicates_found'] ?? 0),
                         (int) ($cleanup_summary['merged'] ?? 0),
                         (int) ($cleanup_summary['products_reassigned'] ?? 0),
@@ -802,7 +802,7 @@ class WRD_Admin {
                 $notices[] = [
                     'class' => 'notice notice-success',
                     'message' => sprintf(
-                        __('Migration: %1$d products checked, %2$d missing HS codes, %3$d matched to profiles, %4$d updated. (dry-run: %5$s)', 'woocommerce-us-duties'),
+                        __('Migration: %1$d products checked, %2$d missing HS codes, %3$d matched to duty rules, %4$d updated. (dry-run: %5$s)', 'woocommerce-us-duties'),
                         (int) ($migrate_summary['checked'] ?? 0),
                         (int) ($migrate_summary['missing_hs'] ?? 0),
                         (int) ($migrate_summary['matched'] ?? 0),
@@ -952,7 +952,7 @@ class WRD_Admin {
         echo '<h2 class="hndle"><span>' . esc_html__('Export', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
         echo '<p class="description">' . esc_html__('Download a CSV of your saved duty rules or a CSV of product customs details and assignments.', 'woocommerce-us-duties') . '</p>';
-        echo '<p class="wrd-import-actions"><a href="' . esc_url($export_profiles_url) . '" class="button">' . esc_html__('Export Profiles CSV', 'woocommerce-us-duties') . '</a> <a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a></p>';
+        echo '<p class="wrd-import-actions"><a href="' . esc_url($export_profiles_url) . '" class="button">' . esc_html__('Export Duty Rules CSV', 'woocommerce-us-duties') . '</a> <a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a></p>';
         echo '</div>';
         echo '</div>';
 
@@ -1027,7 +1027,7 @@ class WRD_Admin {
         echo '</p>';
         echo '<p><label><input type="checkbox" name="map_json_ignore_fx_duty" value="1" checked /> ' . esc_html__('Ignore fields like *_fx_rate_duty when calculating rate percentages (recommended for Zonos files)', 'woocommerce-us-duties') . '</label></p>';
         echo '</details>';
-        echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if profile exists with same HS code, country, and date', 'woocommerce-us-duties') . '</label></p>';
+        echo '<p><label><input type="checkbox" name="replace_existing" value="1" /> ' . esc_html__('Update if a duty rule exists with the same HS code, country, and date', 'woocommerce-us-duties') . '</label></p>';
         echo '<p><label>' . esc_html__('Notes (optional)', 'woocommerce-us-duties') . '<br /><input type="text" name="notes" class="regular-text" placeholder="Imported duties file" /></label></p>';
         submit_button(__('Import Duties JSON', 'woocommerce-us-duties'), 'primary', '', false);
         echo '</form>';
@@ -1074,7 +1074,7 @@ class WRD_Admin {
         echo '<div class="inside">';
         echo '<p class="description">' . esc_html__('Maintenance tools to clean up duplicate duty rules and fill in missing HS codes on products.', 'woocommerce-us-duties') . '</p>';
 
-        echo '<h3 style="margin-top:0;">' . esc_html__('Cleanup Duplicate Profiles', 'woocommerce-us-duties') . '</h3>';
+        echo '<h3 style="margin-top:0;">' . esc_html__('Cleanup Duplicate Duty Rules', 'woocommerce-us-duties') . '</h3>';
         echo '<p class="wrd-import-form-note">' . esc_html__('Merge duplicate duty rules that share the same HS code and country of origin. Any linked products are reassigned automatically.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post">';
         wp_nonce_field('wrd_cleanup_duplicates', 'wrd_cleanup_nonce');
@@ -1120,7 +1120,7 @@ class WRD_Admin {
             $unused_summary = $this->handle_unused_profile_cleanup();
             if (is_array($unused_summary)) {
                 $message = sprintf(
-                    __('Unused profile cleanup: %1$d found, %2$d deleted. (dry-run: %3$s)', 'woocommerce-us-duties'),
+                    __('Unused duty rule cleanup: %1$d found, %2$d deleted. (dry-run: %3$s)', 'woocommerce-us-duties'),
                     (int) ($unused_summary['unused_found'] ?? 0),
                     (int) ($unused_summary['profiles_deleted'] ?? 0),
                     !empty($unused_summary['dry_run']) ? 'yes' : 'no'
@@ -1255,7 +1255,7 @@ class WRD_Admin {
             }
         </style>';
 
-        echo '<p class="wrd-tools-intro">' . esc_html__('Operational tools for profile cleanup, metadata refresh, FX cache, and AI-assisted description curation. Use preview/dry-run first before applying writes.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-tools-intro">' . esc_html__('Operational tools for duty rule cleanup, metadata refresh, FX cache, and AI-assisted description curation. Use preview/dry-run first before applying writes.', 'woocommerce-us-duties') . '</p>';
 
         foreach ($notices as $notice) {
             echo '<div class="' . esc_attr($notice['class']) . ' wrd-tools-notice"><p>' . esc_html($notice['message']) . '</p>';
@@ -1270,15 +1270,15 @@ class WRD_Admin {
         echo '<div class="postbox wrd-tools-card--wide">';
         echo '<h2 class="hndle"><span>' . esc_html__('Description Curation', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Generate a structured package for external LLM-assisted cleanup of missing/incomplete profiles, then import curated responses with preview/apply controls.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Generate a structured package for external LLM-assisted cleanup of missing or incomplete duty rules, then import curated responses with preview/apply controls.', 'woocommerce-us-duties') . '</p>';
 
         echo '<div class="wrd-tool-section">';
         echo '<h3 class="wrd-tool-title">' . esc_html__('1) Generate Curation Package', 'woocommerce-us-duties') . '</h3>';
-        echo '<p class="wrd-tool-note">' . esc_html__('Exports a Markdown prompt file with explicit instructions, output schema, and profile rows flagged as missing/incomplete.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-tool-note">' . esc_html__('Exports a Markdown prompt file with explicit instructions, output schema, and duty rule rows flagged as missing or incomplete.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" class="wrd-tool-form">';
         wp_nonce_field('wrd_curation_export', 'wrd_curation_export_nonce');
-        echo '<p class="wrd-tool-inline"><label for="wrd-curation-limit">' . esc_html__('Max profiles', 'woocommerce-us-duties') . '</label> <input id="wrd-curation-limit" type="number" name="curation_limit" value="200" min="1" max="2000" /> <label for="wrd-curation-context">' . esc_html__('Products per profile', 'woocommerce-us-duties') . '</label> <input id="wrd-curation-context" type="number" name="curation_context_products" value="5" min="0" max="20" /></p>';
-        echo '<p class="wrd-tool-option"><label><input type="checkbox" name="curation_include_inactive" value="1" /> ' . esc_html__('Include inactive profiles', 'woocommerce-us-duties') . '</label></p>';
+        echo '<p class="wrd-tool-inline"><label for="wrd-curation-limit">' . esc_html__('Max duty rules', 'woocommerce-us-duties') . '</label> <input id="wrd-curation-limit" type="number" name="curation_limit" value="200" min="1" max="2000" /> <label for="wrd-curation-context">' . esc_html__('Products per duty rule', 'woocommerce-us-duties') . '</label> <input id="wrd-curation-context" type="number" name="curation_context_products" value="5" min="0" max="20" /></p>';
+        echo '<p class="wrd-tool-option"><label><input type="checkbox" name="curation_include_inactive" value="1" /> ' . esc_html__('Include inactive duty rules', 'woocommerce-us-duties') . '</label></p>';
         submit_button(__('Download Curation Prompt (MD)', 'woocommerce-us-duties'), 'secondary', 'wrd_curation_export', false);
         echo '</form>';
         echo '</div>';
@@ -1326,14 +1326,14 @@ class WRD_Admin {
         echo '</div>';
 
         echo '<div class="postbox">';
-        echo '<h2 class="hndle"><span>' . esc_html__('Profile Maintenance', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<h2 class="hndle"><span>' . esc_html__('Duty Rule Maintenance', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Remove profiles that are not directly linked to any active product or variation.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Remove duty rules that are not directly linked to any active product or variation.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post">';
         wp_nonce_field('wrd_cleanup_unused_profiles', 'wrd_cleanup_unused_profiles_nonce');
         echo '<p class="wrd-tool-option"><label><input type="checkbox" name="unused_cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
-        echo '<p class="wrd-tool-option"><label><input type="checkbox" name="unused_cleanup_include_inactive" value="1" /> ' . esc_html__('Include inactive profiles', 'woocommerce-us-duties') . '</label></p>';
-        submit_button(__('Find & Delete Unused Profiles', 'woocommerce-us-duties'), 'secondary', '', false);
+        echo '<p class="wrd-tool-option"><label><input type="checkbox" name="unused_cleanup_include_inactive" value="1" /> ' . esc_html__('Include inactive duty rules', 'woocommerce-us-duties') . '</label></p>';
+        submit_button(__('Find & Delete Unused Duty Rules', 'woocommerce-us-duties'), 'secondary', '', false);
         echo '</form>';
         echo '</div>';
         echo '</div>';
@@ -1401,12 +1401,12 @@ class WRD_Admin {
         ];
 
         if ($found_count === 0) {
-            $summary['messages'][] = 'No unused profiles found.';
+            $summary['messages'][] = 'No unused duty rules found.';
             return $summary;
         }
 
         $summary['messages'][] = sprintf(
-            'Found %d unused profile(s): %s',
+            'Found %d unused duty rule(s): %s',
             $found_count,
             implode(', ', $unused_ids)
         );
@@ -1423,7 +1423,7 @@ class WRD_Admin {
         $deleted = (int) $wpdb->query($delete_sql);
 
         $summary['profiles_deleted'] = $deleted;
-        $summary['messages'][] = sprintf('Deleted %d profile(s).', $deleted);
+        $summary['messages'][] = sprintf('Deleted %d duty rule(s).', $deleted);
 
         return $summary;
     }
@@ -1463,7 +1463,7 @@ class WRD_Admin {
             [
                 '# WRD Customs Description Curation Prompt',
                 '',
-                'You are helping curate customs descriptions for WooCommerce duty profiles.',
+                'You are helping curate customs descriptions for WooCommerce duty rules.',
                 '',
                 'Task:',
                 '1. Review each row in the JSON payload below.',
@@ -1824,13 +1824,13 @@ class WRD_Admin {
 
             if ($skipNeedsReview && $needsReview) {
                 $summary['skipped']++;
-                $summary['messages'][] = sprintf('Profile %d skipped: flagged for manual review.', $profileId);
+                $summary['messages'][] = sprintf('Duty rule %d skipped: flagged for manual review.', $profileId);
                 continue;
             }
 
             if ($confidence !== null && $confidence < $minConfidence) {
                 $summary['skipped']++;
-                $summary['messages'][] = sprintf('Profile %d skipped: confidence %.3f below threshold %.3f.', $profileId, $confidence, $minConfidence);
+                $summary['messages'][] = sprintf('Duty rule %d skipped: confidence %.3f below threshold %.3f.', $profileId, $confidence, $minConfidence);
                 continue;
             }
 
@@ -1840,7 +1840,7 @@ class WRD_Admin {
             );
             if (!is_array($existing)) {
                 $summary['skipped']++;
-                $summary['messages'][] = sprintf('Profile %d skipped: not found.', $profileId);
+                $summary['messages'][] = sprintf('Duty rule %d skipped: not found.', $profileId);
                 continue;
             }
 
@@ -1896,7 +1896,7 @@ class WRD_Admin {
             $summary['valid']++;
             if ($previewCount < 50) {
                 $summary['messages'][] = sprintf(
-                    'Profile %d: %s%s%s%s',
+                    'Duty rule %d: %s%s%s%s',
                     $profileId,
                     implode('; ', $changes),
                     $confidence !== null ? sprintf(' (confidence %.3f)', $confidence) : '',
@@ -1912,7 +1912,7 @@ class WRD_Admin {
                     $summary['updated']++;
                 } else {
                     $summary['errors']++;
-                    $summary['messages'][] = sprintf('Profile %d update error: %s', $profileId, (string) $wpdb->last_error);
+                    $summary['messages'][] = sprintf('Duty rule %d update error: %s', $profileId, (string) $wpdb->last_error);
                 }
             }
         }
@@ -2054,7 +2054,7 @@ class WRD_Admin {
                 'wrd_hs_source' => __('Source', 'woocommerce-us-duties'),
                 'wrd_hs_code' => __('HS Code', 'woocommerce-us-duties'),
                 'wrd_hs_origin' => __('Origin', 'woocommerce-us-duties'),
-                'wrd_hs_profile' => __('Profile', 'woocommerce-us-duties'),
+                'wrd_hs_profile' => __('Duty Rule', 'woocommerce-us-duties'),
                 'wrd_hs_status' => __('Status', 'woocommerce-us-duties'),
             ];
         }
@@ -2155,7 +2155,7 @@ class WRD_Admin {
         if (!current_user_can('edit_products')) { return; }
 
         echo '<div class="notice notice-info is-dismissible wrd-hs-manager-notice"><p>';
-        echo esc_html__('HS Manager mode: edit HS/origin inline and use the Profile pencil to search/apply profile matches per row.', 'woocommerce-us-duties');
+        echo esc_html__('HS Manager mode: edit HS/origin inline and use the duty rule pencil to search and apply matching rules per row.', 'woocommerce-us-duties');
         echo '</p></div>';
     }
 
@@ -2469,7 +2469,7 @@ class WRD_Admin {
 
         if ($status === 'missing_profile') {
             echo '<span class="wrd-customs-badge wrd-customs-status-missing-profile" data-status="missing-profile" style="color:#d98300;font-weight:500;">' . esc_html($hs_code) . '</span> <span style="color:#666;">(' . esc_html($origin) . ')</span>';
-            echo '<br><span style="color:#d98300;font-size:11px;">' . esc_html__('No profile', 'woocommerce-us-duties') . '</span>';
+            echo '<br><span style="color:#d98300;font-size:11px;">' . esc_html__('No duty rule', 'woocommerce-us-duties') . '</span>';
             return;
         }
 
@@ -2540,17 +2540,17 @@ class WRD_Admin {
         }
 
         if ($column === 'wrd_hs_profile') {
-            $edit_btn = '<button type="button" class="button-link wrd-profile-edit-toggle" aria-label="' . esc_attr__('Edit profile assignment', 'woocommerce-us-duties') . '"><span class="dashicons dashicons-edit"></span></button>';
+            $edit_btn = '<button type="button" class="button-link wrd-profile-edit-toggle" aria-label="' . esc_attr__('Edit duty rule assignment', 'woocommerce-us-duties') . '"><span class="dashicons dashicons-edit"></span></button>';
             $profile_editor = '<span class="wrd-profile-editor">';
-            $profile_editor .= '<input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search profile…', 'woocommerce-us-duties') . '" />';
+            $profile_editor .= '<input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search duty rule…', 'woocommerce-us-duties') . '" />';
             $profile_editor .= ' <button type="button" class="button button-small button-primary wrd-duty-save" data-product-id="' . esc_attr((string) $post_id) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>';
             $profile_editor .= ' <button type="button" class="button button-small wrd-profile-edit-cancel">' . esc_html__('Cancel', 'woocommerce-us-duties') . '</button>';
             $profile_editor .= '</span>';
 
             if ($ctx['profile_id'] > 0) {
-                echo '<span class="wrd-hs-pill wrd-hs-pill--ok wrd-profile-view">' . esc_html(sprintf(__('Linked #%d', 'woocommerce-us-duties'), (int) $ctx['profile_id'])) . '</span> ' . $edit_btn . ' ' . $profile_editor;
+                echo '<span class="wrd-hs-pill wrd-hs-pill--ok wrd-profile-view">' . esc_html(sprintf(__('Linked rule #%d', 'woocommerce-us-duties'), (int) $ctx['profile_id'])) . '</span> ' . $edit_btn . ' ' . $profile_editor;
             } else {
-                echo '<span class="wrd-hs-pill wrd-hs-pill--warn wrd-profile-view">' . esc_html__('No profile', 'woocommerce-us-duties') . '</span> ' . $edit_btn . ' ' . $profile_editor;
+                echo '<span class="wrd-hs-pill wrd-hs-pill--warn wrd-profile-view">' . esc_html__('No duty rule', 'woocommerce-us-duties') . '</span> ' . $edit_btn . ' ' . $profile_editor;
             }
             echo '<span class="wrd-duty-row-status"></span>';
             return;
@@ -2618,7 +2618,7 @@ class WRD_Admin {
             return '<span class="wrd-hs-pill wrd-hs-pill--ok">' . esc_html__('Ready', 'woocommerce-us-duties') . '</span>';
         }
         if ($status === 'missing_profile') {
-            return '<span class="wrd-hs-pill wrd-hs-pill--warn">' . esc_html__('Missing Profile', 'woocommerce-us-duties') . '</span>';
+            return '<span class="wrd-hs-pill wrd-hs-pill--warn">' . esc_html__('Missing Duty Rule', 'woocommerce-us-duties') . '</span>';
         }
         if ($status === 'legacy') {
             return '<span class="wrd-hs-pill wrd-hs-pill--legacy">' . esc_html__('Legacy', 'woocommerce-us-duties') . '</span>';
@@ -2700,7 +2700,7 @@ class WRD_Admin {
         return [
             'needs_hs' => __('Needs HS', 'woocommerce-us-duties'),
             'needs_origin' => __('Needs Origin', 'woocommerce-us-duties'),
-            'missing_profile' => __('Missing Profile', 'woocommerce-us-duties'),
+            'missing_profile' => __('Missing Duty Rule', 'woocommerce-us-duties'),
             'legacy' => __('Legacy', 'woocommerce-us-duties'),
             'ready' => __('Ready', 'woocommerce-us-duties'),
         ];
@@ -2843,7 +2843,7 @@ class WRD_Admin {
         delete_transient(self::PRODUCT_CUSTOMS_COUNT_CACHE_KEY);
     }
 
-    // Add "Assign Profile" row action to products
+    // Add "Assign Duty Rule" row action to products
     public function add_assign_profile_row_action($actions, $post) {
         if ($post->post_type !== 'product') {
             return $actions;
@@ -2860,7 +2860,7 @@ class WRD_Admin {
                 $new_actions['wrd_assign_profile'] = sprintf(
                     '<a href="#" class="wrd-assign-profile-action" data-product-id="%d">%s</a>',
                     $post->ID,
-                    esc_html__('Assign Profile', 'woocommerce-us-duties')
+                    esc_html__('Assign Duty Rule', 'woocommerce-us-duties')
                 );
             }
         }
@@ -2879,11 +2879,11 @@ class WRD_Admin {
                 <tr id="wrd-inline-assign-row" class="inline-edit-row inline-edit-row-post quick-edit-row quick-edit-row-post inline-edit-product">
                     <td colspan="10" class="colspanchange">
                         <fieldset class="inline-edit-col-left" style="width: 100%;">
-                            <legend class="inline-edit-legend"><?php esc_html_e('Assign Profile', 'woocommerce-us-duties'); ?></legend>
+                            <legend class="inline-edit-legend"><?php esc_html_e('Assign Duty Rule', 'woocommerce-us-duties'); ?></legend>
                             <div class="inline-edit-col" style="display: flex; gap: 12px; align-items: center;">
                                 <label style="flex: 1;">
-                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Profile', 'woocommerce-us-duties'); ?></span>
-                                    <input type="text" class="wrd-profile-lookup" placeholder="<?php esc_attr_e('Search by HS code or description...', 'woocommerce-us-duties'); ?>" style="width: 300px;" />
+                                    <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('Duty Rule', 'woocommerce-us-duties'); ?></span>
+                                    <input type="text" class="wrd-profile-lookup" placeholder="<?php esc_attr_e('Search duty rules by HS code or description...', 'woocommerce-us-duties'); ?>" style="width: 300px;" />
                                 </label>
                                 <label>
                                     <span class="title" style="width: auto; display: inline-block; margin-right: 8px;"><?php esc_html_e('HS Code', 'woocommerce-us-duties'); ?></span>
@@ -2937,7 +2937,7 @@ class WRD_Admin {
         $profile = WRD_DB::get_profile_by_hs_country($hs_code, $country);
 
         wp_send_json_success([
-            'message' => 'Profile assigned successfully',
+            'message' => 'Duty rule assigned successfully',
             'hs_code' => $hs_code,
             'country' => $country,
             'has_profile' => !empty($profile)
@@ -3015,8 +3015,8 @@ class WRD_Admin {
         echo '<fieldset class="inline-edit-col-right wrd-customs-fields"><div class="inline-edit-col">';
         echo '<h4>' . esc_html__('Customs', 'woocommerce-us-duties') . '</h4>';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('Profile (type to search)', 'woocommerce-us-duties') . '</span>';
-        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search by HS code, country, or description...', 'woocommerce-us-duties') . '" /></span>';
+        echo '<span class="title">' . esc_html__('Duty Rule (type to search)', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search duty rules by HS code, country, or description...', 'woocommerce-us-duties') . '" /></span>';
         echo '</label>';
         echo '<label class="inline-edit-group">';
         echo '<span class="title">' . esc_html__('HS Code', 'woocommerce-us-duties') . '</span>';
@@ -3040,7 +3040,7 @@ class WRD_Admin {
             // Keep quick edit panel lightweight.
             echo '<div class="wrd-customs-inline" style="margin-top:8px;">';
             echo '<strong>' . esc_html__('Customs', 'woocommerce-us-duties') . ':</strong> ';
-            echo '<input type="text" class="wrd-profile-lookup" style="min-width:260px" placeholder="' . esc_attr__('Search profile...', 'woocommerce-us-duties') . '" /> ';
+            echo '<input type="text" class="wrd-profile-lookup" style="min-width:260px" placeholder="' . esc_attr__('Search duty rule...', 'woocommerce-us-duties') . '" /> ';
             echo '<input type="text" name="wrd_hs_code" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" style="width:120px" /> ';
             echo '<input type="text" name="wrd_country_of_origin" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" maxlength="2" style="width:60px" /> ';
             echo '<input type="text" name="wrd_customs_description" placeholder="' . esc_attr__('Description', 'woocommerce-us-duties') . '" /> ';
@@ -3056,8 +3056,8 @@ class WRD_Admin {
 
         echo '<div class="wrd-bulk-section">';
         echo '<label class="inline-edit-group">';
-        echo '<span class="title">' . esc_html__('Profile', 'woocommerce-us-duties') . '</span>';
-        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search by HS code, country, or description...', 'woocommerce-us-duties') . '" /></span>';
+        echo '<span class="title">' . esc_html__('Duty Rule', 'woocommerce-us-duties') . '</span>';
+        echo '<span class="input-text-wrap"><input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search duty rules by HS code, country, or description...', 'woocommerce-us-duties') . '" /></span>';
         echo '</label>';
         echo '</div>';
 
@@ -3282,9 +3282,9 @@ class WRD_Admin {
                         'saved' => __('Saved', 'woocommerce-us-duties'),
                         'failed' => __('Save failed', 'woocommerce-us-duties'),
                         'linked' => __('Linked', 'woocommerce-us-duties'),
-                        'noProfile' => __('No profile', 'woocommerce-us-duties'),
+                        'noProfile' => __('No duty rule', 'woocommerce-us-duties'),
                         'ready' => __('Ready', 'woocommerce-us-duties'),
-                        'missingProfile' => __('Missing Profile', 'woocommerce-us-duties'),
+                        'missingProfile' => __('Missing Duty Rule', 'woocommerce-us-duties'),
                     ],
                 ]);
                 return;
@@ -3306,7 +3306,7 @@ class WRD_Admin {
                     'missing_hs_country' => __('Please enter both HS code and country code.', 'woocommerce-us-duties'),
                     'error_prefix' => __('Error:', 'woocommerce-us-duties'),
                     'unknown_error' => __('Unknown error', 'woocommerce-us-duties'),
-                    'assign_failed' => __('Failed to assign profile. Please try again.', 'woocommerce-us-duties'),
+                    'assign_failed' => __('Failed to assign the duty rule. Please try again.', 'woocommerce-us-duties'),
                 ],
             ]);
             return;
@@ -3331,9 +3331,9 @@ class WRD_Admin {
                     'saved' => __('Saved', 'woocommerce-us-duties'),
                     'failed' => __('Save failed', 'woocommerce-us-duties'),
                     'linked' => __('Linked', 'woocommerce-us-duties'),
-                    'noProfile' => __('No profile', 'woocommerce-us-duties'),
+                    'noProfile' => __('No duty rule', 'woocommerce-us-duties'),
                     'ready' => __('Ready', 'woocommerce-us-duties'),
-                    'missingProfile' => __('Missing Profile', 'woocommerce-us-duties'),
+                    'missingProfile' => __('Missing Duty Rule', 'woocommerce-us-duties'),
                 ],
             ]);
             return;
@@ -3363,11 +3363,11 @@ class WRD_Admin {
                     'searchNonce' => wp_create_nonce('wrd_search_profiles'),
                     'i18n' => [
                         'missing' => __('HS code and origin are required.', 'woocommerce-us-duties'),
-                        'missing232' => __('Section 232 metal value is required for this profile.', 'woocommerce-us-duties'),
+                        'missing232' => __('Section 232 metal value is required for this duty rule.', 'woocommerce-us-duties'),
                         'invalidCountry' => __('Origin must be a 2-letter country code.', 'woocommerce-us-duties'),
-                        'chooseRule' => __('Choose a saved rule first.', 'woocommerce-us-duties'),
+                        'chooseRule' => __('Choose a saved duty rule first.', 'woocommerce-us-duties'),
                         'actionRequired' => __('Choose a bulk action first.', 'woocommerce-us-duties'),
-                        'ruleNotFound' => __('The selected saved rule could not be found. Please choose it again.', 'woocommerce-us-duties'),
+                        'ruleNotFound' => __('The selected saved duty rule could not be found. Please choose it again.', 'woocommerce-us-duties'),
                         'saving' => __('Saving...', 'woocommerce-us-duties'),
                         'saved' => __('Saved', 'woocommerce-us-duties'),
                         'bulkSaving' => __('Applying to selected rows...', 'woocommerce-us-duties'),
@@ -4180,7 +4180,7 @@ class WRD_Admin {
 
             if (!$profile || empty($profile['hs_code'])) {
                 $summary['messages'][] = sprintf(
-                    'Product #%d: No profile found with HS code for "%s" (%s)',
+                    'Product #%d: No duty rule found with HS code for "%s" (%s)',
                     $product_id,
                     mb_substr($desc, 0, 40),
                     $origin
@@ -4353,7 +4353,7 @@ class WRD_Admin {
             // Support cloning via ?clone={id}
             if (!$id && isset($_GET['clone'])) { $id = (int) $_GET['clone']; }
             if ($id) { $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $id), ARRAY_A); }
-            if (!$row) { echo '<p>' . esc_html__('Profile not found.', 'woocommerce-us-duties') . '</p>'; return; }
+            if (!$row) { echo '<p>' . esc_html__('Duty rule not found.', 'woocommerce-us-duties') . '</p>'; return; }
             // If cloning, ensure ID is treated as new
             if (isset($_GET['clone'])) {
                 $row['id'] = 0;
@@ -4989,10 +4989,11 @@ class WRD_Admin {
         $source_filter = isset($_GET['rsource']) ? sanitize_key($_GET['rsource']) : 'all';
         $category_filter = (isset($_GET['rcat']) && is_numeric($_GET['rcat'])) ? (string) max(0, (int) $_GET['rcat']) : 'all';
         $stock_filter = isset($_GET['rstock']) ? sanitize_key($_GET['rstock']) : 'all';
+        $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         if (!in_array($stock_filter, ['all', 'instock', 'outofstock', 'onbackorder'], true)) {
             $stock_filter = 'all';
         }
-        $has_active_filters = ($type_filter !== 'all' || $source_filter !== 'all' || $category_filter !== 'all' || $stock_filter !== 'all');
+        $has_active_filters = ($type_filter !== 'all' || $source_filter !== 'all' || $category_filter !== 'all' || $stock_filter !== 'all' || $search !== '');
         $clear_filters_url = add_query_arg([
             'page' => 'wrd-customs',
             'tab' => 'reconcile',
@@ -5003,6 +5004,7 @@ class WRD_Admin {
             'source' => $source_filter,
             'category' => $category_filter,
             'stock' => $stock_filter,
+            'search' => $search,
         ]);
         $counts = $table->get_status_counts();
         $stock_options = function_exists('wc_get_stock_status_options') ? wc_get_stock_status_options() : [];
@@ -5042,6 +5044,7 @@ class WRD_Admin {
                 'rsource' => $source_filter,
                 'rcat' => $category_filter,
                 'rstock' => $stock_filter,
+                's' => $search,
             ], admin_url('admin.php'));
             $count = isset($counts[$key]) ? (int) $counts[$key] : 0;
             printf(
@@ -5120,6 +5123,7 @@ class WRD_Admin {
         foreach (['page'=>'wrd-customs','tab'=>'reconcile'] as $k=>$v) { echo '<input type="hidden" name="' . esc_attr($k) . '" value="' . esc_attr($v) . '" />'; }
         echo '<input type="hidden" name="status" value="' . esc_attr($status) . '" />';
         echo '<div class="wrd-reconcile-inline-fields">';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Product', 'woocommerce-us-duties') . '</span><input type="search" name="s" id="wrd-rsearch" value="' . esc_attr($search) . '" placeholder="' . esc_attr__('Title or SKU', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Type', 'woocommerce-us-duties') . '</span><select name="rtype" id="wrd-rtype">';
         $type_opts = [
             'all' => __('All product types', 'woocommerce-us-duties'),
@@ -5171,8 +5175,8 @@ class WRD_Admin {
 
         echo '<div class="wrd-reconcile-utility-row wrd-reconcile-utility-row--bulk" id="wrd-reconcile-bulk-row">';
         echo '<div class="wrd-reconcile-inline-fields">';
-        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Action', 'woocommerce-us-duties') . '</span><select id="wrd-reconcile-bulk-action"><option value="set_values">' . esc_html__('Set entered values', 'woocommerce-us-duties') . '</option><option value="copy_rule">' . esc_html__('Copy from saved rule', 'woocommerce-us-duties') . '</option></select></label>';
-        echo '<label class="wrd-reconcile-field is-hidden" id="wrd-reconcile-bulk-rule-field"><span class="wrd-reconcile-field-label">' . esc_html__('Saved Rule', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-rule" placeholder="' . esc_attr__('Search saved rule (type to search)', 'woocommerce-us-duties') . '" /><input type="hidden" id="wrd-reconcile-bulk-profile-id" value="0" /><input type="hidden" id="wrd-reconcile-bulk-requires-232" value="0" /></label>';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Action', 'woocommerce-us-duties') . '</span><select id="wrd-reconcile-bulk-action"><option value="set_values">' . esc_html__('Set entered values', 'woocommerce-us-duties') . '</option><option value="copy_rule">' . esc_html__('Copy from saved duty rule', 'woocommerce-us-duties') . '</option></select></label>';
+        echo '<label class="wrd-reconcile-field is-hidden" id="wrd-reconcile-bulk-rule-field"><span class="wrd-reconcile-field-label">' . esc_html__('Saved Duty Rule', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-rule" placeholder="' . esc_attr__('Search saved duty rule (type to search)', 'woocommerce-us-duties') . '" /><input type="hidden" id="wrd-reconcile-bulk-profile-id" value="0" /><input type="hidden" id="wrd-reconcile-bulk-requires-232" value="0" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk HS', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';
@@ -5180,10 +5184,10 @@ class WRD_Admin {
         echo '<div class="wrd-reconcile-inline-actions"><span class="wrd-reconcile-selected-count">' . sprintf(esc_html__('%s selected', 'woocommerce-us-duties'), '<strong>0</strong>') . '</span><button type="button" id="wrd-reconcile-bulk-apply" class="button button-primary">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button><span class="wrd-reconcile-bulk-status" aria-live="polite" role="status"></span></div>';
         echo '</div>';
         echo '<div id="wrd-reconcile-rule-popover" class="wrd-reconcile-rule-popover" aria-hidden="true">';
-        echo '<p class="wrd-reconcile-rule-popover-title">' . esc_html__('Copy From Saved Rule', 'woocommerce-us-duties') . '</p>';
-        echo '<label class="screen-reader-text" for="wrd-reconcile-row-rule">' . esc_html__('Saved rule lookup', 'woocommerce-us-duties') . '</label>';
-        echo '<input type="text" id="wrd-reconcile-row-rule" placeholder="' . esc_attr__('Type to search saved rules', 'woocommerce-us-duties') . '" />';
-        echo '<p class="wrd-reconcile-rule-popover-help">' . esc_html__('Choose a saved rule to fill HS code and origin for this row.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-reconcile-rule-popover-title">' . esc_html__('Copy From Saved Duty Rule', 'woocommerce-us-duties') . '</p>';
+        echo '<label class="screen-reader-text" for="wrd-reconcile-row-rule">' . esc_html__('Saved duty rule lookup', 'woocommerce-us-duties') . '</label>';
+        echo '<input type="text" id="wrd-reconcile-row-rule" placeholder="' . esc_attr__('Type to search saved duty rules', 'woocommerce-us-duties') . '" />';
+        echo '<p class="wrd-reconcile-rule-popover-help">' . esc_html__('Choose a saved duty rule to fill HS code and origin for this row.', 'woocommerce-us-duties') . '</p>';
         echo '<div class="wrd-reconcile-rule-popover-actions"><button type="button" class="button" id="wrd-reconcile-rule-close">' . esc_html__('Close', 'woocommerce-us-duties') . '</button></div>';
         echo '</div>';
         echo '<div class="wrd-reconcile-table">';

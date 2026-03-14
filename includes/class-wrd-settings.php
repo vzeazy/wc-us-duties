@@ -62,7 +62,7 @@ class WRD_Settings {
         echo '</select><p class="description">' . esc_html__('DDP collects estimated duties at checkout. DAP shows an estimate and charges duties on delivery.', 'woocommerce-us-duties') . '</p></td></tr>';
         echo '<tr><th><label>' . esc_html__('Fee Label', 'woocommerce-us-duties') . '</label></th><td><input type="text" name="fee_label" class="regular-text" value="' . esc_attr($opt['fee_label']) . '" /></td></tr>';
         echo '<tr><th><label>' . esc_html__('US Only', 'woocommerce-us-duties') . '</label></th><td><label><input type="checkbox" name="us_only" value="1" ' . checked(1, (int)$opt['us_only'], false) . ' /> ' . esc_html__('Estimate for US destinations only', 'woocommerce-us-duties') . '</label></td></tr>';
-        echo '<tr><th><label>' . esc_html__('Missing Profile Behavior', 'woocommerce-us-duties') . '</label></th><td>';
+        echo '<tr><th><label>' . esc_html__('Missing Duty Rule Behavior', 'woocommerce-us-duties') . '</label></th><td>';
         echo '<select name="missing_profile_behavior">';
         foreach ([ 'fallback' => __('Fallback (estimate 0 duty)', 'woocommerce-us-duties'), 'block' => __('Block checkout', 'woocommerce-us-duties') ] as $k => $label) {
             printf('<option value="%s" %s>%s</option>', esc_attr($k), selected($opt['missing_profile_behavior'], $k, false), esc_html($label));

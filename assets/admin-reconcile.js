@@ -21,6 +21,11 @@
     return String(parsed);
   }
 
+  function normalizeMetalForCompare(value){
+    var normalized = normalizeMetal(value);
+    return normalized === '' ? $.trim(value || '') : normalized;
+  }
+
   function getRowByProductId(productId){
     return $('input.wrd-reconcile-select[value="' + productId + '"]').closest('tr');
   }
@@ -58,14 +63,13 @@
     var metal = normalizeMetal($row.find('input.wrd-232-metal').val());
     var profileId = parseInt($row.find('input.wrd-selected-profile-id').val(), 10) || 0;
     $row.find('input.wrd-cc').val(cc);
-    $row.find('input.wrd-232-metal').val(metal);
     return { hs: hs, cc: cc, metal: metal, profileId: profileId };
   }
 
   function setRowBaseline($row, hs, cc, metal){
     $row.data('wrdInitialHs', normalizeHs(hs));
     $row.data('wrdInitialCc', normalizeCountryCode(cc));
-    $row.data('wrdInitialMetal', normalizeMetal(metal));
+    $row.data('wrdInitialMetal', normalizeMetalForCompare(metal));
   }
 
   function clearRowRuleSelection($row){
@@ -93,9 +97,8 @@
   function syncRowApplyState($row){
     var hs = normalizeHs($row.find('input.wrd-hs').val());
     var cc = normalizeCountryCode($row.find('input.wrd-cc').val());
-    var metal = normalizeMetal($row.find('input.wrd-232-metal').val());
+    var metal = normalizeMetalForCompare($row.find('input.wrd-232-metal').val());
     $row.find('input.wrd-cc').val(cc);
-    $row.find('input.wrd-232-metal').val(metal);
 
     if (typeof $row.data('wrdInitialHs') === 'undefined'){
       setRowBaseline($row, hs, cc, metal);
@@ -308,7 +311,6 @@
     var profileId = parseInt($('#wrd-reconcile-bulk-profile-id').val(), 10) || 0;
     var requires232 = String($('#wrd-reconcile-bulk-requires-232').val() || '') === '1';
     $('#wrd-reconcile-bulk-cc').val(cc);
-    $('#wrd-reconcile-bulk-metal').val(metal);
 
     if (action === 'copy_rule' && profileId <= 0){
       setBulkStatus(WRDReconcile.i18n.chooseRule, 'error');

@@ -5,7 +5,7 @@ jQuery(function($) {
   var $currentRow = null;
   var i18n = (typeof WRDInlineAssign !== 'undefined' && WRDInlineAssign.i18n) ? WRDInlineAssign.i18n : {};
 
-  // Handle "Assign Profile" row action click
+  // Handle "Assign Duty Rule" row action click
   $(document).on('click', '.wrd-assign-profile-action', function(e) {
     e.preventDefault();
 
@@ -103,7 +103,7 @@ jQuery(function($) {
         if ($customsCell.length) {
           var statusHtml = response.data.has_profile
             ? '<span style="color:#008a00;">' + hsCode + '</span> (' + country + ')'
-            : '<span style="color:#d98300;">' + hsCode + '</span> (' + country + ')<br>No profile';
+            : '<span style="color:#d98300;">' + hsCode + '</span> (' + country + ')<br>No duty rule';
           $customsCell.html(statusHtml);
         }
 
@@ -119,7 +119,7 @@ jQuery(function($) {
       }
     })
     .fail(function() {
-      alert((i18n.error_prefix || 'Error:') + ' ' + (i18n.assign_failed || 'Failed to assign profile. Please try again.'));
+      alert((i18n.error_prefix || 'Error:') + ' ' + (i18n.assign_failed || 'Failed to assign the duty rule. Please try again.'));
       $button.prop('disabled', false);
       $spinner.removeClass('is-active');
     });

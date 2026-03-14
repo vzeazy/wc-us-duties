@@ -62,7 +62,7 @@
             if (hasProfile) {
               $view.removeClass('wrd-hs-pill--warn').addClass('wrd-hs-pill--ok').text(WRDDutyManager.i18n.linked || 'Linked');
             } else {
-              $view.removeClass('wrd-hs-pill--ok').addClass('wrd-hs-pill--warn').text(WRDDutyManager.i18n.noProfile || 'No profile');
+              $view.removeClass('wrd-hs-pill--ok').addClass('wrd-hs-pill--warn').text(WRDDutyManager.i18n.noProfile || 'No duty rule');
             }
           }
           $profileCell.removeClass('wrd-profile-editing');
@@ -72,7 +72,7 @@
           if (hasProfile) {
             $statusCell.html('<span class=\"wrd-hs-pill wrd-hs-pill--ok\">' + (WRDDutyManager.i18n.ready || 'Ready') + '</span>');
           } else {
-            $statusCell.html('<span class=\"wrd-hs-pill wrd-hs-pill--warn\">' + (WRDDutyManager.i18n.missingProfile || 'Missing Profile') + '</span>');
+            $statusCell.html('<span class=\"wrd-hs-pill wrd-hs-pill--warn\">' + (WRDDutyManager.i18n.missingProfile || 'Missing Duty Rule') + '</span>');
           }
         }
       } else {

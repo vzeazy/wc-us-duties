@@ -8,6 +8,7 @@ if (!class_exists('WP_List_Table')) {
 class WRD_Reconciliation_Table extends WP_List_Table {
     private $status;
     private $filters = [];
+    private $search = '';
     private $records = [];
     private $status_counts = [];
     private $indexed = false;
@@ -34,6 +35,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'category' => $category_filter,
             'stock' => $this->normalize_stock_filter($filters['stock'] ?? 'all'),
         ];
+        $this->search = isset($filters['search']) ? sanitize_text_field((string) $filters['search']) : '';
     }
 
     public function get_columns() {
@@ -105,7 +107,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         return '<div class="wrd-row-actions" data-product="' . esc_attr($pid) . '">'
              . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
              . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
-             . '<div class="wrd-row-actions-footer"><button type="button" class="button button-secondary button-small wrd-rule-picker-toggle" data-product="' . esc_attr($pid) . '">' . esc_html__('Saved Rule', 'woocommerce-us-duties') . '</button><button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
+             . '<div class="wrd-row-actions-footer"><button type="button" class="button button-secondary button-small wrd-rule-picker-toggle" data-product="' . esc_attr($pid) . '">' . esc_html__('Saved Duty Rule', 'woocommerce-us-duties') . '</button><button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
              . '<span class="wrd-status" aria-live="polite" role="status"></span></div>'
              . '</div>';
     }
@@ -145,6 +147,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     }
 
     private function ensure_indexed(): void {
+        global $wpdb;
+
         if ($this->indexed) { return; }
 
         $this->status_counts = [
@@ -155,14 +159,36 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'all' => 0,
         ];
 
-        $ids = get_posts([
-            'post_type' => ['product', 'product_variation'],
-            'post_status' => ['publish', 'draft', 'pending', 'private'],
-            'posts_per_page' => -1,
-            'fields' => 'ids',
-            'orderby' => 'ID',
-            'order' => 'DESC',
-        ]);
+        $where = [
+            "p.post_type IN ('product', 'product_variation')",
+            "p.post_status IN ('publish', 'draft', 'pending', 'private')",
+        ];
+
+        $join = [
+            "LEFT JOIN {$wpdb->postmeta} sku ON (sku.post_id = p.ID AND sku.meta_key = '_sku')",
+            "LEFT JOIN {$wpdb->posts} parent_p ON (parent_p.ID = p.post_parent AND p.post_type = 'product_variation')",
+            "LEFT JOIN {$wpdb->postmeta} parent_sku ON (parent_sku.post_id = parent_p.ID AND parent_sku.meta_key = '_sku')",
+        ];
+
+        if ($this->search !== '') {
+            $like = '%' . $wpdb->esc_like($this->search) . '%';
+            $where[] = $wpdb->prepare(
+                '(p.post_title LIKE %s OR sku.meta_value LIKE %s OR parent_p.post_title LIKE %s OR parent_sku.meta_value LIKE %s)',
+                $like,
+                $like,
+                $like,
+                $like
+            );
+        }
+
+        $ids = $wpdb->get_col(
+            "SELECT DISTINCT p.ID
+             FROM {$wpdb->posts} p
+             " . implode("\n", $join) . '
+             WHERE ' . implode(' AND ', $where) . '
+             ORDER BY p.ID DESC'
+        );
+        $ids = array_map('intval', $ids);
 
         $profile_cache = [];
         foreach ($ids as $pid) {
@@ -240,7 +266,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
                 $status_parts[] = $this->render_status_badge(
                     __('232 Metal Missing', 'woocommerce-us-duties'),
                     'critical',
-                    __('Profile requires Section 232 metal value. Enter a per-product USD metal value and click Apply.', 'woocommerce-us-duties')
+                    __('This duty rule requires a Section 232 metal value. Enter a per-product USD metal value and click Apply.', 'woocommerce-us-duties')
                 );
             }
             foreach ($warnings as $warning) {
@@ -253,9 +279,9 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         } elseif (!$has_profile) {
             $status_key = 'no_match';
             $status_parts[] = $this->render_status_badge(
-                __('No Profile', 'woocommerce-us-duties'),
+                __('No Duty Rule', 'woocommerce-us-duties'),
                 'warning',
-                __('HS code and origin are set, but no matching profile exists for this pair.', 'woocommerce-us-duties')
+                __('HS code and origin are set, but no matching duty rule exists for this pair.', 'woocommerce-us-duties')
             );
         } elseif (!empty($warnings)) {
             $status_key = 'warnings';
@@ -270,7 +296,15 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             $status_parts[] = $this->render_status_badge(
                 __('Ready', 'woocommerce-us-duties'),
                 'ready',
-                __('Classification data is complete and a matching profile was found.', 'woocommerce-us-duties')
+                __('Classification data is complete and a matching duty rule was found.', 'woocommerce-us-duties')
+            );
+        }
+
+        if ($requires_232 && !$missing_232) {
+            $status_parts[] = $this->render_status_badge(
+                __('232 Rule', 'woocommerce-us-duties'),
+                'info',
+                __('This matched duty rule includes Section 232 data. Verify the metal value is correct for this product.', 'woocommerce-us-duties')
             );
         }
 
@@ -318,12 +352,12 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         if ($linked_profile_id > 0) {
             $linked = WRD_DB::get_profile_by_id($linked_profile_id);
             if (!$linked) {
-                $warnings[] = __('Linked profile missing', 'woocommerce-us-duties');
+                $warnings[] = __('Linked duty rule missing', 'woocommerce-us-duties');
             } else {
                 $linked_hs = trim((string) ($linked['hs_code'] ?? ''));
                 $linked_cc = strtoupper(trim((string) ($linked['country_code'] ?? '')));
                 if (($hs_code !== '' && $linked_hs !== $hs_code) || ($origin !== '' && $linked_cc !== $origin)) {
-                    $warnings[] = __('Linked profile mismatch', 'woocommerce-us-duties');
+                    $warnings[] = __('Linked duty rule mismatch', 'woocommerce-us-duties');
                 }
             }
         }

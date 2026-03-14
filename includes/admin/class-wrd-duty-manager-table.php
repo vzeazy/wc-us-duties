@@ -30,7 +30,7 @@ class WRD_Duty_Manager_Table extends WP_List_Table {
             'source' => __('Source', 'woocommerce-us-duties'),
             'hs_code' => __('HS Code', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
-            'profile' => __('Profile', 'woocommerce-us-duties'),
+            'profile' => __('Duty Rule', 'woocommerce-us-duties'),
             'status' => __('Status', 'woocommerce-us-duties'),
             'actions' => __('Actions', 'woocommerce-us-duties'),
         ];
@@ -86,7 +86,7 @@ class WRD_Duty_Manager_Table extends WP_List_Table {
 
     private function render_actions(array $item): string {
         $pid = (int) $item['id'];
-        $profile = '<input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search profile…', 'woocommerce-us-duties') . '" style="min-width:180px;" />';
+        $profile = '<input type="text" class="wrd-profile-lookup" placeholder="' . esc_attr__('Search duty rule…', 'woocommerce-us-duties') . '" style="min-width:180px;" />';
         $save = '<button type="button" class="button button-small button-primary wrd-duty-save" data-product-id="' . esc_attr((string) $pid) . '">' . esc_html__('Save', 'woocommerce-us-duties') . '</button>';
         $open = '<a class="button button-small" href="' . esc_url((string) get_edit_post_link($pid)) . '">' . esc_html__('Open', 'woocommerce-us-duties') . '</a>';
         $msg = '<span class="wrd-duty-row-status" style="margin-left:6px;"></span>';
@@ -165,8 +165,8 @@ class WRD_Duty_Manager_Table extends WP_List_Table {
 
             $status_html = $this->render_status_html($status, $effective_hs, $effective_origin, $profile_id);
             $profile_text = $profile_id > 0
-                ? sprintf(__('Linked #%d', 'woocommerce-us-duties'), $profile_id)
-                : __('No profile', 'woocommerce-us-duties');
+                ? sprintf(__('Linked rule #%d', 'woocommerce-us-duties'), $profile_id)
+                : __('No duty rule', 'woocommerce-us-duties');
 
             $items[] = [
                 'id' => (int) $post->ID,
@@ -202,7 +202,7 @@ class WRD_Duty_Manager_Table extends WP_List_Table {
             return '<span style="color:#008a20;font-weight:600;">' . esc_html__('Ready', 'woocommerce-us-duties') . '</span>';
         }
         if ($status === 'missing_profile') {
-            return '<span style="color:#d98300;font-weight:600;">' . esc_html__('Missing Profile', 'woocommerce-us-duties') . '</span>';
+            return '<span style="color:#d98300;font-weight:600;">' . esc_html__('Missing Duty Rule', 'woocommerce-us-duties') . '</span>';
         }
         if ($status === 'legacy') {
             return '<span style="color:#996800;font-weight:600;">' . esc_html__('Legacy', 'woocommerce-us-duties') . '</span>';

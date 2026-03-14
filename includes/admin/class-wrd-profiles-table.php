@@ -211,8 +211,8 @@ class WRD_Profiles_Table extends WP_List_Table {
                     add_action('admin_notices', function() use ($deleted) {
                         echo '<div class="notice notice-success is-dismissible"><p>' . 
                              sprintf(
-                                 /* translators: %d: number of deleted profiles */
-                                 _n('%d profile deleted.', '%d profiles deleted.', $deleted, 'woocommerce-us-duties'), 
+                                 /* translators: %d: number of deleted duty rules */
+                                 _n('%d duty rule deleted.', '%d duty rules deleted.', $deleted, 'woocommerce-us-duties'),
                                  $deleted
                              ) . '</p></div>';
                     });
@@ -235,8 +235,8 @@ class WRD_Profiles_Table extends WP_List_Table {
                     add_action('admin_notices', function() use ($updated) {
                         echo '<div class="notice notice-success is-dismissible"><p>' . 
                              sprintf(
-                                 /* translators: %d: number of updated profiles */
-                                 _n('%d profile updated.', '%d profiles updated.', $updated, 'woocommerce-us-duties'), 
+                                 /* translators: %d: number of updated duty rules */
+                                 _n('%d duty rule updated.', '%d duty rules updated.', $updated, 'woocommerce-us-duties'),
                                  $updated
                              ) . '</p></div>';
                     });

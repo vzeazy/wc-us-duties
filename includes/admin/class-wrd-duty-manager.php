@@ -30,7 +30,7 @@ class WRD_Duty_Manager {
             'all' => __('All statuses', 'woocommerce-us-duties'),
             'needs_hs' => __('Needs HS', 'woocommerce-us-duties'),
             'needs_origin' => __('Needs Origin', 'woocommerce-us-duties'),
-            'missing_profile' => __('Missing Profile', 'woocommerce-us-duties'),
+            'missing_profile' => __('Missing Duty Rule', 'woocommerce-us-duties'),
             'legacy' => __('Legacy', 'woocommerce-us-duties'),
             'ready' => __('Ready', 'woocommerce-us-duties'),
         ];
