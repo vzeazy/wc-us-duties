@@ -161,7 +161,8 @@
       }
       $input.data('wrdBound', true);
       $input.autocomplete({
-        minLength: 2,
+        minLength: 1,
+        delay: 100,
         source: function(req, resp){
           $.getJSON(WRDReconcile.ajax, {
             action: 'wrd_search_profiles',

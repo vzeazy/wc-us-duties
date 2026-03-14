@@ -62,14 +62,37 @@
 
 .wp-list-table .column-assign .wrd-row-actions {
     display: flex;
+    flex-direction: column;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 220px;
 }
 
 .wp-list-table .column-assign input.wrd-rule-lookup {
-    min-width: 180px;
     width: 100%;
+    min-width: 0;
+}
+
+.wp-list-table .column-assign .wrd-row-actions-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ui-autocomplete {
+    z-index: 100000 !important;
+    max-height: 260px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #c3c4c7;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+}
+
+.ui-menu .ui-menu-item-wrapper {
+    padding: 8px 10px;
 }
 
 .wp-list-table .column-assign .wrd-apply.is-idle {
@@ -91,6 +114,38 @@
 
 .wp-list-table .column-assign .wrd-status.is-error {
     color: #b32d2e;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #dcdcde;
+    border-radius: 999px;
+    background: #f6f7f7;
+    color: #3c434a;
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 500;
+    padding: 4px 8px;
+    white-space: nowrap;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge-instock {
+    background: #f0f8f1;
+    border-color: #bddfc4;
+    color: #0f5f2f;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge-outofstock {
+    background: #fff6f7;
+    border-color: #f0c8cc;
+    color: #8a2424;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge-onbackorder {
+    background: #fff9f0;
+    border-color: #efd8aa;
+    color: #7a5f00;
 }
 
 .wp-list-table .column-status .wrd-status-badges {

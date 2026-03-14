@@ -1,5 +1,37 @@
 # Duty Rate System Improvements - Implementation Summary
 
+## 2026-03-13 - Reconciliation Stock Status Visibility (Planned)
+
+### Goal
+Add stock status visibility and filtering to the Product Reconciliation screen so operators can prioritize customs-ready products by sellable inventory state without turning the page into an inventory management tool.
+
+### Phase Tracking
+- [x] Phase 1: Define scope and execution plan in repo docs.
+- [x] Phase 2: Implement reconciliation stock status filter, column, and URL state handling.
+- [x] Phase 3: Lint/verify changed files and document completion notes and edge cases.
+
+### Implementation Notes
+- Add a `Stock Status` filter alongside the existing reconciliation filters.
+- Preserve the stock filter across status tabs and clear-filter behavior.
+- Add a compact read-only stock status column to the reconciliation table.
+- Normalize stock state from WooCommerce product objects and keep filtering contextual to active filters.
+- Reuse WooCommerce stock labels where possible and handle unknown or empty states safely.
+
+### Milestone Notes
+- Phase 2 completed:
+  - Added reconciliation request/state handling for `rstock` and preserved it across tab navigation.
+  - Added a `Stock Status` filter control using WooCommerce stock labels with an `All stock states` default.
+  - Extended reconciliation records with normalized stock state and a compact read-only stock badge column.
+  - Applied stock-state filtering inside the existing secondary-filter pass so tab counts remain contextual to active filters.
+  - Kept inventory scope read-only and added a neutral fallback for products with unknown or empty stock states.
+- Phase 3 completed:
+  - Ran PHP lint checks:
+    - `php -l includes/admin/class-wrd-reconciliation-table.php`
+    - `php -l includes/class-wrd-admin.php`
+  - Both lint checks passed with no syntax errors.
+  - Verified the implementation preserves `rstock` across status tabs, keeps counts contextual to active filters, and leaves stock handling read-only.
+  - Documented the unknown stock-state fallback as `N/A` so grouped/external or non-standard WooCommerce values do not break reconciliation filtering.
+
 ## 2026-02-27 - Description Curation Tool (LLM-Assisted)
 
 - Added a new **Tools > Description Curation** workflow for placeholder/HS-only profile descriptions.

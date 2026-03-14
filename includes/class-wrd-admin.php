@@ -4988,7 +4988,11 @@ class WRD_Admin {
         $type_filter = isset($_GET['rtype']) ? sanitize_key($_GET['rtype']) : 'all';
         $source_filter = isset($_GET['rsource']) ? sanitize_key($_GET['rsource']) : 'all';
         $category_filter = (isset($_GET['rcat']) && is_numeric($_GET['rcat'])) ? (string) max(0, (int) $_GET['rcat']) : 'all';
-        $has_active_filters = ($type_filter !== 'all' || $source_filter !== 'all' || $category_filter !== 'all');
+        $stock_filter = isset($_GET['rstock']) ? sanitize_key($_GET['rstock']) : 'all';
+        if (!in_array($stock_filter, ['all', 'instock', 'outofstock', 'onbackorder'], true)) {
+            $stock_filter = 'all';
+        }
+        $has_active_filters = ($type_filter !== 'all' || $source_filter !== 'all' || $category_filter !== 'all' || $stock_filter !== 'all');
         $clear_filters_url = add_query_arg([
             'page' => 'wrd-customs',
             'tab' => 'reconcile',
@@ -4998,8 +5002,27 @@ class WRD_Admin {
             'type' => $type_filter,
             'source' => $source_filter,
             'category' => $category_filter,
+            'stock' => $stock_filter,
         ]);
         $counts = $table->get_status_counts();
+        $stock_options = function_exists('wc_get_stock_status_options') ? wc_get_stock_status_options() : [];
+        $stock_filter_options = [
+            'all' => __('All stock states', 'woocommerce-us-duties'),
+        ];
+        foreach (['instock', 'outofstock', 'onbackorder'] as $stock_key) {
+            if (isset($stock_options[$stock_key]) && $stock_options[$stock_key] !== '') {
+                $stock_filter_options[$stock_key] = (string) $stock_options[$stock_key];
+                continue;
+            }
+
+            if ($stock_key === 'instock') {
+                $stock_filter_options[$stock_key] = __('In stock', 'woocommerce-us-duties');
+            } elseif ($stock_key === 'onbackorder') {
+                $stock_filter_options[$stock_key] = __('Backorder', 'woocommerce-us-duties');
+            } else {
+                $stock_filter_options[$stock_key] = __('Out of stock', 'woocommerce-us-duties');
+            }
+        }
 
         $tab_defs = [
             'needs_data' => __('Needs Data', 'woocommerce-us-duties'),
@@ -5018,6 +5041,7 @@ class WRD_Admin {
                 'rtype' => $type_filter,
                 'rsource' => $source_filter,
                 'rcat' => $category_filter,
+                'rstock' => $stock_filter,
             ], admin_url('admin.php'));
             $count = isset($counts[$key]) ? (int) $counts[$key] : 0;
             printf(
@@ -5064,9 +5088,12 @@ class WRD_Admin {
             .wrd-reconcile-selected-count { color: #646970; }
             .wrd-reconcile-bulk-status { min-height: 20px; display: inline-flex; align-items: center; color: #646970; font-size: 12px; min-width: 0; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .wrd-reconcile-help { margin: 0; color: #646970; font-size: 12px; }
-            .wrd-rule-lookup { width: 100%; min-width: 180px; }
-            .wrd-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+            .wrd-rule-lookup { width: 100%; min-width: 0; }
+            .wrd-row-actions { display: flex; flex-direction: column; flex-wrap: wrap; align-items: stretch; gap: 4px; min-width: 220px; }
+            .wrd-row-actions-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
             .wrd-row-actions .wrd-status { min-width: 40px; }
+            .ui-autocomplete { z-index: 100000 !important; max-height: 260px; overflow-y: auto; overflow-x: hidden; border: 1px solid #c3c4c7; background: #fff; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12); }
+            .ui-menu .ui-menu-item-wrapper { padding: 8px 10px; }
             .wrd-reconcile-table .tablenav.top { margin: 0; padding: 6px 10px; border-bottom: 1px solid #dcdcde; }
             .wrd-reconcile-table .tablenav.bottom { display: none; }
             .wrd-reconcile-table .wp-list-table { margin-top: 0; border-top: 0; }
@@ -5126,6 +5153,11 @@ class WRD_Admin {
             }
         }
         echo '</select></label>';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Stock Status', 'woocommerce-us-duties') . '</span><select name="rstock" id="wrd-rstock">';
+        foreach ($stock_filter_options as $key => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($key), selected($stock_filter, $key, false), esc_html($label));
+        }
+        echo '</select></label>';
         echo '<button type="submit" class="button button-secondary wrd-reconcile-apply-filters">' . esc_html__('Apply Filters', 'woocommerce-us-duties') . '</button>';
         echo '<a id="wrd-reconcile-clear-filters" href="' . esc_url($clear_filters_url) . '" class="button wrd-reconcile-clear' . ($has_active_filters ? '' : ' is-hidden') . '">' . esc_html__('Clear Filters', 'woocommerce-us-duties') . '</a>';
         echo '</div>';
@@ -5135,7 +5167,7 @@ class WRD_Admin {
         echo '<div class="wrd-reconcile-utility-row wrd-reconcile-utility-row--bulk" id="wrd-reconcile-bulk-row">';
         echo '<div class="wrd-reconcile-inline-fields">';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Action', 'woocommerce-us-duties') . '</span><select id="wrd-reconcile-bulk-action"><option value="set_values">' . esc_html__('Set entered values', 'woocommerce-us-duties') . '</option><option value="copy_rule">' . esc_html__('Copy from saved rule', 'woocommerce-us-duties') . '</option></select></label>';
-        echo '<label class="wrd-reconcile-field is-hidden" id="wrd-reconcile-bulk-rule-field"><span class="wrd-reconcile-field-label">' . esc_html__('Saved Rule', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-rule" placeholder="' . esc_attr__('Search saved rule', 'woocommerce-us-duties') . '" /><input type="hidden" id="wrd-reconcile-bulk-profile-id" value="0" /><input type="hidden" id="wrd-reconcile-bulk-requires-232" value="0" /></label>';
+        echo '<label class="wrd-reconcile-field is-hidden" id="wrd-reconcile-bulk-rule-field"><span class="wrd-reconcile-field-label">' . esc_html__('Saved Rule', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-rule" placeholder="' . esc_attr__('Search saved rule (type to search)', 'woocommerce-us-duties') . '" /><input type="hidden" id="wrd-reconcile-bulk-profile-id" value="0" /><input type="hidden" id="wrd-reconcile-bulk-requires-232" value="0" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk HS', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';

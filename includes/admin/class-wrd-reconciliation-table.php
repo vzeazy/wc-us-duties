@@ -32,6 +32,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'type' => isset($filters['type']) ? sanitize_key((string) $filters['type']) : 'all',
             'source' => isset($filters['source']) ? sanitize_key((string) $filters['source']) : 'all',
             'category' => $category_filter,
+            'stock' => $this->normalize_stock_filter($filters['stock'] ?? 'all'),
         ];
     }
 
@@ -42,6 +43,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'sku' => __('SKU', 'woocommerce-us-duties'),
             'type' => __('Type', 'woocommerce-us-duties'),
             'source' => __('Source', 'woocommerce-us-duties'),
+            'stock_status' => __('Stock Status', 'woocommerce-us-duties'),
             'hs_code' => __('HS Code', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
             'metal_232' => __('232 Metal USD', 'woocommerce-us-duties'),
@@ -62,6 +64,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             case 'sku': return esc_html($item['sku']);
             case 'type': return esc_html($item['type']);
             case 'source': return esc_html($item['source_label']);
+            case 'stock_status': return wp_kses_post($item['stock_status_html']);
             case 'status': return wp_kses_post($item['status_html']);
         }
         return '';
@@ -101,11 +104,11 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $pid = (int) $item['id'];
         return '<div class="wrd-row-actions" data-product="' . esc_attr($pid) . '">'
              . '<label class="screen-reader-text" for="wrd-rule-' . esc_attr($pid) . '">' . esc_html__('Saved rule lookup', 'woocommerce-us-duties') . '</label>'
-             . '<input type="text" id="wrd-rule-' . esc_attr($pid) . '" class="wrd-rule-lookup" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('Search saved rule', 'woocommerce-us-duties') . '" />'
+             . '<input type="text" id="wrd-rule-' . esc_attr($pid) . '" class="wrd-rule-lookup" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('Search saved rule (type to search)', 'woocommerce-us-duties') . '" />'
              . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
              . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
-             . '<button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
-             . '<span class="wrd-status" aria-live="polite" role="status"></span>'
+             . '<div class="wrd-row-actions-footer"><button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
+             . '<span class="wrd-status" aria-live="polite" role="status"></span></div>'
              . '</div>';
     }
 
@@ -199,6 +202,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'none' => __('None', 'woocommerce-us-duties'),
         ];
         $source_label = $source_labels[$source] ?? ucfirst($source);
+        $stock_status_key = $this->normalize_stock_status((string) $product->get_stock_status());
+        $stock_status_label = $this->get_stock_status_labels()[$stock_status_key] ?? __('N/A', 'woocommerce-us-duties');
 
         $has_profile = false;
         $matched_profile = null;
@@ -289,6 +294,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'source_key' => $source,
             'source_label' => $source_label,
             'category_ids' => $this->resolve_category_ids($product),
+            'stock_status_key' => $stock_status_key,
+            'stock_status_html' => $this->render_stock_status_badge($stock_status_key, $stock_status_label),
             'hs_code' => $hs_code,
             'origin' => $origin,
             'profile_id' => (int) ($matched_profile['id'] ?? $product->get_meta('_wrd_profile_id', true)),
@@ -405,6 +412,9 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         if (!in_array($this->filters['source'], ['all', 'explicit', 'category', 'parent', 'none'], true)) {
             return false;
         }
+        if (!in_array($this->filters['stock'], ['all', 'instock', 'outofstock', 'onbackorder'], true)) {
+            return false;
+        }
         $category_filter = (string) ($this->filters['category'] ?? 'all');
         if ($category_filter !== 'all' && !ctype_digit($category_filter)) {
             return false;
@@ -413,6 +423,9 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             return false;
         }
         if ($this->filters['source'] !== 'all' && $record['source_key'] !== $this->filters['source']) {
+            return false;
+        }
+        if ($this->filters['stock'] !== 'all' && ($record['stock_status_key'] ?? '') !== $this->filters['stock']) {
             return false;
         }
         if ($category_filter !== 'all') {
@@ -459,6 +472,45 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'all' => 'all',
         ];
         return $map[$status] ?? 'needs_data';
+    }
+
+    private function normalize_stock_filter($stock_filter): string {
+        $stock_filter = sanitize_key((string) $stock_filter);
+        return in_array($stock_filter, ['all', 'instock', 'outofstock', 'onbackorder'], true) ? $stock_filter : 'all';
+    }
+
+    private function normalize_stock_status(string $stock_status): string {
+        $stock_status = sanitize_key($stock_status);
+        return in_array($stock_status, ['instock', 'outofstock', 'onbackorder'], true) ? $stock_status : 'unknown';
+    }
+
+    private function get_stock_status_labels(): array {
+        $options = function_exists('wc_get_stock_status_options') ? wc_get_stock_status_options() : [];
+        $labels = [];
+
+        foreach (['instock', 'outofstock', 'onbackorder'] as $stock_status) {
+            if (isset($options[$stock_status]) && $options[$stock_status] !== '') {
+                $labels[$stock_status] = (string) $options[$stock_status];
+                continue;
+            }
+
+            if ($stock_status === 'instock') {
+                $labels[$stock_status] = __('In stock', 'woocommerce-us-duties');
+            } elseif ($stock_status === 'onbackorder') {
+                $labels[$stock_status] = __('Backorder', 'woocommerce-us-duties');
+            } else {
+                $labels[$stock_status] = __('Out of stock', 'woocommerce-us-duties');
+            }
+        }
+        $labels['unknown'] = __('N/A', 'woocommerce-us-duties');
+
+        return $labels;
+    }
+
+    private function render_stock_status_badge(string $stock_status_key, string $label): string {
+        return '<span class="wrd-stock-badge wrd-stock-badge-' . esc_attr($stock_status_key) . '">'
+            . esc_html($label)
+            . '</span>';
     }
 
     private function matches_status_filter(string $status_key): bool {
