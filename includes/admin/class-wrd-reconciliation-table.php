@@ -582,8 +582,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $commercial_rate = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
 
         return '<div class="wrd-source-meta" title="' . esc_attr__('Matched duty rates', 'woocommerce-us-duties') . '">'
-            . '<span>P ' . esc_html($this->format_duty_rate($postal_rate)) . '</span>'
-            . '<span>C ' . esc_html($this->format_duty_rate($commercial_rate)) . '</span>'
+            . '<span class="wrd-duty-rate"><span class="wrd-duty-rate-label">P</span><span class="wrd-duty-rate-value">' . esc_html($this->format_duty_rate($postal_rate)) . '</span></span>'
+            . '<span class="wrd-duty-rate"><span class="wrd-duty-rate-label">C</span><span class="wrd-duty-rate-value">' . esc_html($this->format_duty_rate($commercial_rate)) . '</span></span>'
             . '</div>';
     }
 
