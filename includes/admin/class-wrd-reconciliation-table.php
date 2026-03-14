@@ -43,12 +43,12 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'cb' => '<input type="checkbox" class="wrd-reconcile-select-all" />',
             'title' => __('Product', 'woocommerce-us-duties'),
             'sku' => __('SKU', 'woocommerce-us-duties'),
-            'source' => __('Duty', 'woocommerce-us-duties'),
-            'stock_status' => __('Stock Status', 'woocommerce-us-duties'),
             'hs_code' => __('HS Code', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
             'metal_232' => __('Metal USD', 'woocommerce-us-duties'),
+            'source' => __('Duty', 'woocommerce-us-duties'),
             'status' => __('Status', 'woocommerce-us-duties'),
+            'stock_status' => __('Stock Status', 'woocommerce-us-duties'),
         ];
     }
 
