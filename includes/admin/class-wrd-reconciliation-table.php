@@ -508,9 +508,26 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     }
 
     private function render_stock_status_badge(string $stock_status_key, string $label): string {
-        return '<span class="wrd-stock-badge wrd-stock-badge-' . esc_attr($stock_status_key) . '">'
-            . esc_html($label)
+        $short_label = $this->get_stock_status_short_label($stock_status_key);
+
+        return '<span class="wrd-stock-badge wrd-stock-badge-' . esc_attr($stock_status_key) . '" title="' . esc_attr($label) . '" aria-label="' . esc_attr($label) . '">'
+            . '<span class="wrd-stock-badge-dot" aria-hidden="true"></span>'
+            . '<span class="wrd-stock-badge-text" aria-hidden="true">' . esc_html($short_label) . '</span>'
             . '</span>';
+    }
+
+    private function get_stock_status_short_label(string $stock_status_key): string {
+        if ($stock_status_key === 'instock') {
+            return __('In', 'woocommerce-us-duties');
+        }
+        if ($stock_status_key === 'onbackorder') {
+            return __('Back', 'woocommerce-us-duties');
+        }
+        if ($stock_status_key === 'outofstock') {
+            return __('Out', 'woocommerce-us-duties');
+        }
+
+        return __('N/A', 'woocommerce-us-duties');
     }
 
     private function matches_status_filter(string $status_key): bool {

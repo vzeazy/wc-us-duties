@@ -119,6 +119,7 @@
 .wp-list-table .column-stock_status .wrd-stock-badge {
     display: inline-flex;
     align-items: center;
+    gap: 6px;
     border: 1px solid #dcdcde;
     border-radius: 999px;
     background: #f6f7f7;
@@ -128,6 +129,18 @@
     font-weight: 500;
     padding: 4px 8px;
     white-space: nowrap;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: 0 0 7px;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge-text {
+    letter-spacing: 0.01em;
 }
 
 .wp-list-table .column-stock_status .wrd-stock-badge-instock {
@@ -146,6 +159,12 @@
     background: #fff9f0;
     border-color: #efd8aa;
     color: #7a5f00;
+}
+
+.wp-list-table .column-stock_status .wrd-stock-badge-unknown {
+    background: #f6f7f7;
+    border-color: #dcdcde;
+    color: #646970;
 }
 
 .wp-list-table .column-status .wrd-status-badges {
