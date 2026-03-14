@@ -43,14 +43,12 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'cb' => '<input type="checkbox" class="wrd-reconcile-select-all" />',
             'title' => __('Product', 'woocommerce-us-duties'),
             'sku' => __('SKU', 'woocommerce-us-duties'),
-            'type' => __('Type', 'woocommerce-us-duties'),
-            'source' => __('Source', 'woocommerce-us-duties'),
+            'source' => __('Duty', 'woocommerce-us-duties'),
             'stock_status' => __('Stock Status', 'woocommerce-us-duties'),
             'hs_code' => __('HS Code', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
-            'metal_232' => __('232 Metal USD', 'woocommerce-us-duties'),
+            'metal_232' => __('232 USD', 'woocommerce-us-duties'),
             'status' => __('Status', 'woocommerce-us-duties'),
-            'assign' => __('Action', 'woocommerce-us-duties'),
         ];
     }
 
@@ -64,8 +62,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     protected function column_default($item, $column_name) {
         switch ($column_name) {
             case 'sku': return esc_html($item['sku']);
-            case 'type': return esc_html($item['type']);
-            case 'source': return esc_html($item['source_label']);
+            case 'source':
+                return !empty($item['duty_rates_html']) ? $item['duty_rates_html'] : '<span class="wrd-duty-empty">&mdash;</span>';
             case 'stock_status': return wp_kses_post($item['stock_status_html']);
             case 'status': return wp_kses_post($item['status_html']);
         }
@@ -74,7 +72,17 @@ class WRD_Reconciliation_Table extends WP_List_Table {
 
     protected function column_title($item) {
         $editUrl = get_edit_post_link($item['id']);
-        return sprintf('<strong><a href="%s">%s</a></strong>', esc_url($editUrl), esc_html($item['title']));
+        $type_marker = '';
+        if (($item['type_key'] ?? '') === 'variation') {
+            $type_marker = ' <span class="wrd-product-kind-badge" title="' . esc_attr__('Variation', 'woocommerce-us-duties') . '" aria-label="' . esc_attr__('Variation', 'woocommerce-us-duties') . '">VAR</span>';
+        }
+
+        return sprintf(
+            '<strong><a href="%s">%s</a></strong>%s',
+            esc_url($editUrl),
+            esc_html($item['title']),
+            $type_marker
+        );
     }
 
     private function render_status_badge(string $label, string $tone = 'neutral', string $help = ''): string {
@@ -92,7 +100,12 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $pid = (int)$item['id'];
         $hs_id = 'wrd-hs-' . $pid;
         return '<label class="screen-reader-text" for="' . esc_attr($hs_id) . '">' . esc_html__('HS code', 'woocommerce-us-duties') . '</label>'
-             . '<input type="text" id="' . esc_attr($hs_id) . '" class="wrd-hs" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" value="' . esc_attr($item['hs_code']) . '" />';
+             . '<div class="wrd-hs-editor" data-product="' . esc_attr($pid) . '">'
+             . '<input type="text" id="' . esc_attr($hs_id) . '" class="wrd-hs" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('HS code or saved rule', 'woocommerce-us-duties') . '" value="' . esc_attr($item['hs_code']) . '" />'
+             . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
+             . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
+             . '<div class="wrd-hs-editor-footer"><button type="button" class="button button-secondary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Save', 'woocommerce-us-duties') . '</button><span class="wrd-status" aria-live="polite" role="status"></span></div>'
+             . '</div>';
     }
 
     protected function column_origin($item) {
@@ -100,16 +113,6 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $cc_id = 'wrd-cc-' . $pid;
         return '<label class="screen-reader-text" for="' . esc_attr($cc_id) . '">' . esc_html__('Country code', 'woocommerce-us-duties') . '</label>'
              . '<input type="text" id="' . esc_attr($cc_id) . '" class="wrd-cc" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" maxlength="2" value="' . esc_attr($item['origin']) . '" />';
-    }
-
-    protected function column_assign($item) {
-        $pid = (int) $item['id'];
-        return '<div class="wrd-row-actions" data-product="' . esc_attr($pid) . '">'
-             . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
-             . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
-             . '<div class="wrd-row-actions-footer"><button type="button" class="button button-secondary button-small wrd-rule-picker-toggle" data-product="' . esc_attr($pid) . '">' . esc_html__('Saved Duty Rule', 'woocommerce-us-duties') . '</button><button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
-             . '<span class="wrd-status" aria-live="polite" role="status"></span></div>'
-             . '</div>';
     }
 
     protected function column_metal_232($item) {
@@ -231,6 +234,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
 
         $has_profile = false;
         $matched_profile = null;
+        $duty_rates_html = '';
         if (!$missing_hs && !$missing_origin) {
             $cache_key = $hs_code . '|' . $origin;
             if (!array_key_exists($cache_key, $profile_cache)) {
@@ -238,6 +242,9 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             }
             $matched_profile = $profile_cache[$cache_key];
             $has_profile = is_array($matched_profile);
+            if ($has_profile) {
+                $duty_rates_html = $this->render_duty_rates_meta($matched_profile);
+            }
         }
 
         $warnings = $this->collect_warnings($product, $hs_code, $origin, $has_profile, $matched_profile);
@@ -317,6 +324,11 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             );
         }
 
+        $status_parts[] = $this->render_source_marker(
+            $source,
+            $source_label
+        );
+
         return [
             'id' => $pid,
             'title' => (string) $product->get_name(),
@@ -325,6 +337,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'type_key' => $type_key,
             'source_key' => $source,
             'source_label' => $source_label,
+            'duty_rates_html' => $duty_rates_html,
             'category_ids' => $this->resolve_category_ids($product),
             'stock_status_key' => $stock_status_key,
             'stock_status_html' => $this->render_stock_status_badge($stock_status_key, $stock_status_label),
@@ -548,6 +561,48 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             . '<span class="wrd-status-badge-text" aria-hidden="true">' . esc_html($short_label) . '</span>'
             . '</span>'
             . '</div>';
+    }
+
+    private function render_duty_rates_meta(array $profile): string {
+        $udj = $profile['us_duty_json'] ?? null;
+        if (is_string($udj)) {
+            $udj = json_decode($udj, true);
+        }
+        if (!is_array($udj) || !class_exists('WRD_Duty_Engine')) {
+            return '';
+        }
+
+        $postal_rate = WRD_Duty_Engine::compute_rate_percent($udj, 'postal');
+        $commercial_rate = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
+
+        return '<div class="wrd-source-meta" title="' . esc_attr__('Matched duty rates', 'woocommerce-us-duties') . '">'
+            . '<span>P ' . esc_html($this->format_duty_rate($postal_rate)) . '</span>'
+            . '<span>C ' . esc_html($this->format_duty_rate($commercial_rate)) . '</span>'
+            . '</div>';
+    }
+
+    private function render_source_marker(string $source_key, string $source_label): string {
+        $marker_map = [
+            'explicit' => 'E',
+            'category' => 'C',
+            'parent' => 'P',
+            'none' => 'N',
+        ];
+        $marker = $marker_map[$source_key] ?? 'N';
+        $title = $source_label !== '' ? $source_label : __('None', 'woocommerce-us-duties');
+
+        return '<div class="wrd-source-marker-wrap">'
+            . '<span class="wrd-source-marker wrd-source-marker-' . esc_attr($source_key) . '" title="' . esc_attr($title) . '" aria-label="' . esc_attr($title) . '">'
+            . esc_html($marker)
+            . '</span>'
+            . '</div>';
+    }
+
+    private function format_duty_rate($rate): string {
+        $value = is_numeric($rate) ? (float) $rate : 0.0;
+        $formatted = number_format($value, 2, '.', '');
+        $formatted = rtrim(rtrim($formatted, '0'), '.');
+        return $formatted . '%';
     }
 
     private function get_stock_status_short_label(string $stock_status_key): string {

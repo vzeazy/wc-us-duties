@@ -32,6 +32,7 @@ Add stock status visibility and filtering to the Product Reconciliation screen s
   - Verified the implementation preserves `rstock` across status tabs, keeps counts contextual to active filters, and leaves stock handling read-only.
   - Documented the unknown stock-state fallback as `N/A` so grouped/external or non-standard WooCommerce values do not break reconciliation filtering.
   - Extended reconciliation bulk actions to support stock-status updates, including stock-only bulk applies without requiring HS/origin changes.
+  - Folded saved-duty-rule lookup into the HS field autocomplete, moved the per-row save control into the HS cell, and removed the separate reconciliation action column.
 
 ## 2026-02-27 - Description Curation Tool (LLM-Assisted)
 

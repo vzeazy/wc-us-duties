@@ -3633,6 +3633,9 @@ class WRD_Admin {
         ];
         if ($metal_232 !== null) {
             $changes['metal_value_232'] = $metal_232;
+            if ($metal_232 !== '' && $product->is_type('variation')) {
+                $changes['metal_mode_232'] = 'explicit';
+            }
         }
         self::upsert_product_classification($pid, $changes);
 
@@ -3708,7 +3711,11 @@ class WRD_Admin {
                 $skipped++;
                 continue;
             }
-            self::upsert_product_classification($pid, $changes_template);
+            $changes = $changes_template;
+            if ($metal_232 !== null && $metal_232 !== '' && $product->is_type('variation')) {
+                $changes['metal_mode_232'] = 'explicit';
+            }
+            self::upsert_product_classification($pid, $changes);
             $updated++;
         }
 
@@ -5249,15 +5256,6 @@ class WRD_Admin {
             .wrd-reconcile-selected-count { color: #646970; }
             .wrd-reconcile-bulk-status { min-height: 20px; display: inline-flex; align-items: center; color: #646970; font-size: 12px; min-width: 0; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .wrd-reconcile-help { margin: 0; color: #646970; font-size: 12px; }
-            .wrd-row-actions { display: flex; flex-direction: column; flex-wrap: wrap; align-items: stretch; gap: 4px; min-width: 0; }
-            .wrd-row-actions-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-            .wrd-row-actions .wrd-status { min-width: 40px; }
-            .wrd-reconcile-rule-popover { position: absolute; z-index: 100001; width: min(420px, calc(100vw - 32px)); background: #fff; border: 1px solid #c3c4c7; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); border-radius: 6px; padding: 12px; display: none; }
-            .wrd-reconcile-rule-popover.is-open { display: block; }
-            .wrd-reconcile-rule-popover-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #1d2327; }
-            .wrd-reconcile-rule-popover input[type="text"] { width: 100%; margin: 0; }
-            .wrd-reconcile-rule-popover-help { margin: 8px 0 0; color: #646970; font-size: 12px; }
-            .wrd-reconcile-rule-popover-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
             .ui-autocomplete { z-index: 100002 !important; max-height: 260px; overflow-y: auto; overflow-x: hidden; border: 1px solid #c3c4c7; background: #fff; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12); }
             .ui-menu .ui-menu-item-wrapper { padding: 8px 10px; }
             .wrd-reconcile-table .tablenav.top { margin: 0; padding: 6px 10px; border-bottom: 1px solid #dcdcde; }
@@ -5337,7 +5335,7 @@ class WRD_Admin {
         echo '<label class="wrd-reconcile-field is-hidden" id="wrd-reconcile-bulk-rule-field"><span class="wrd-reconcile-field-label">' . esc_html__('Saved Duty Rule', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-rule" placeholder="' . esc_attr__('Search saved duty rule (type to search)', 'woocommerce-us-duties') . '" /><input type="hidden" id="wrd-reconcile-bulk-profile-id" value="0" /><input type="hidden" id="wrd-reconcile-bulk-requires-232" value="0" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk HS', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" /></label>';
-        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Stock', 'woocommerce-us-duties') . '</span><select id="wrd-reconcile-bulk-stock">';
         foreach ($bulk_stock_options as $key => $label) {
             printf('<option value="%s">%s</option>', esc_attr($key), esc_html($label));
@@ -5345,13 +5343,6 @@ class WRD_Admin {
         echo '</select></label>';
         echo '</div>';
         echo '<div class="wrd-reconcile-inline-actions"><span class="wrd-reconcile-selected-count">' . sprintf(esc_html__('%s selected', 'woocommerce-us-duties'), '<strong>0</strong>') . '</span><button type="button" id="wrd-reconcile-bulk-apply" class="button button-primary">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button><span class="wrd-reconcile-bulk-status" aria-live="polite" role="status"></span></div>';
-        echo '</div>';
-        echo '<div id="wrd-reconcile-rule-popover" class="wrd-reconcile-rule-popover" aria-hidden="true">';
-        echo '<p class="wrd-reconcile-rule-popover-title">' . esc_html__('Copy From Saved Duty Rule', 'woocommerce-us-duties') . '</p>';
-        echo '<label class="screen-reader-text" for="wrd-reconcile-row-rule">' . esc_html__('Saved duty rule lookup', 'woocommerce-us-duties') . '</label>';
-        echo '<input type="text" id="wrd-reconcile-row-rule" placeholder="' . esc_attr__('Type to search saved duty rules', 'woocommerce-us-duties') . '" />';
-        echo '<p class="wrd-reconcile-rule-popover-help">' . esc_html__('Choose a saved duty rule to fill HS code and origin for this row.', 'woocommerce-us-duties') . '</p>';
-        echo '<div class="wrd-reconcile-rule-popover-actions"><button type="button" class="button" id="wrd-reconcile-rule-close">' . esc_html__('Close', 'woocommerce-us-duties') . '</button></div>';
         echo '</div>';
         echo '<div class="wrd-reconcile-table">';
         $table->prepare_items();

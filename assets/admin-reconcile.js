@@ -1,5 +1,4 @@
 (function($){
-  var activeRulePickerProductId = 0;
 
   function normalizeHs(value){
     return $.trim(value || '');
@@ -39,7 +38,7 @@
   }
 
   function setRowStatus($row, message, state){
-    var $status = $row.find('.wrd-row-actions .wrd-status');
+    var $status = $row.find('.column-hs_code .wrd-status');
     $status.removeClass('is-error is-success is-info');
     if (state === 'error') {
       $status.addClass('is-error');
@@ -118,7 +117,7 @@
     $button.prop('disabled', !changed);
 
     if (!changed){
-      var $status = $row.find('.wrd-row-actions .wrd-status');
+      var $status = $row.find('.column-hs_code .wrd-status');
       if (!$status.hasClass('is-error') && !$status.hasClass('is-info')){
         $status.text('');
       }
@@ -140,9 +139,14 @@
   }
 
   function updateSelectedCount(){
-    var count = $('input.wrd-reconcile-select:checked').length;
+    var $rows = $('input.wrd-reconcile-select');
+    var count = $rows.filter(':checked').length;
+    var total = $rows.length;
     $('.wrd-reconcile-selected-count strong').text(count);
     var showBulk = count > 0;
+    $('.wrd-reconcile-select-all')
+      .prop('checked', total > 0 && count === total)
+      .prop('indeterminate', count > 0 && count < total);
     $('#wrd-reconcile-bulk-row').toggleClass('is-active', showBulk);
     $('#wrd-reconcile-filter-row').toggleClass('is-hidden', showBulk);
     if (!showBulk){
@@ -163,42 +167,12 @@
     $('#wrd-reconcile-bulk-rule-field').toggleClass('is-hidden', action !== 'copy_rule');
   }
 
-  function closeRowRulePicker(){
-    activeRulePickerProductId = 0;
-    $('#wrd-reconcile-rule-popover').removeClass('is-open').attr('aria-hidden', 'true');
-    $('#wrd-reconcile-row-rule').val('');
-  }
-
-  function openRowRulePicker($button){
-    var productId = parseInt($button.data('product'), 10) || 0;
-    if (productId <= 0){
-      return;
-    }
-
-    activeRulePickerProductId = productId;
-    var $popover = $('#wrd-reconcile-rule-popover');
-    var offset = $button.offset() || { top: 0, left: 0 };
-    var popoverWidth = Math.min(420, Math.max(280, $(window).width() - 32));
-    var desiredLeft = offset.left - 140;
-    var maxLeft = Math.max(12, $(window).width() - popoverWidth - 12);
-    var left = Math.min(Math.max(12, desiredLeft), maxLeft);
-    var top = offset.top + $button.outerHeight() + 8;
-
-    $popover.css({
-      width: popoverWidth,
-      top: top,
-      left: left
-    }).addClass('is-open').attr('aria-hidden', 'false');
-
-    $('#wrd-reconcile-row-rule').val('').trigger('focus');
-  }
-
   function attachAutocomplete(context){
     if (typeof $.fn.autocomplete !== 'function' || typeof WRDReconcile === 'undefined') {
       return;
     }
 
-    $(context).find('#wrd-reconcile-row-rule, #wrd-reconcile-bulk-rule').each(function(){
+    $(context).find('.column-hs_code input.wrd-hs, #wrd-reconcile-bulk-rule').each(function(){
       var $input = $(this);
       if ($input.data('wrdBound')) {
         return;
@@ -219,23 +193,21 @@
         select: function(event, ui){
           event.preventDefault();
           var item = ui.item || {};
-          if ($input.attr('id') === 'wrd-reconcile-row-rule'){
-            var $row = getRowByProductId(activeRulePickerProductId);
-            if ($row.length){
-              $row.find('input.wrd-hs').val(item.hs || '');
-              $row.find('input.wrd-cc').val(item.cc || '');
-              setRowRuleSelection($row, item);
-              syncRowApplyState($row);
-              setRowStatus($row, '', '');
-            }
-            closeRowRulePicker();
-          } else {
+          if ($input.attr('id') === 'wrd-reconcile-bulk-rule'){
             $('#wrd-reconcile-bulk-hs').val(item.hs || '');
             $('#wrd-reconcile-bulk-cc').val(normalizeCountryCode(item.cc || ''));
             setBulkRuleSelection(item);
             setBulkStatus('', '');
+            $input.val(item.label || item.value || '');
+          } else {
+            var $row = $input.closest('tr');
+            $row.find('input.wrd-hs').val(item.hs || '');
+            $row.find('input.wrd-cc').val(normalizeCountryCode(item.cc || ''));
+            setRowRuleSelection($row, item);
+            syncRowApplyState($row);
+            setRowStatus($row, '', '');
+            $input.val(item.hs || '');
           }
-          $input.val(item.label || item.value || '');
           return false;
         }
       });
@@ -390,23 +362,6 @@
       }
     });
 
-    $(document).on('click', '.wrd-rule-picker-toggle', function(event){
-      event.preventDefault();
-      openRowRulePicker($(this));
-    });
-
-    $(document).on('click', '#wrd-reconcile-rule-close', function(event){
-      event.preventDefault();
-      closeRowRulePicker();
-    });
-
-    $(document).on('mousedown', function(event){
-      var $target = $(event.target);
-      if (!$target.closest('#wrd-reconcile-rule-popover, .wrd-rule-picker-toggle, .ui-autocomplete').length){
-        closeRowRulePicker();
-      }
-    });
-
     $(document).on('keydown', '.column-hs_code input.wrd-hs, .column-origin input.wrd-cc, .column-metal_232 input.wrd-232-metal', function(event){
       if (event.key === 'Enter'){
         event.preventDefault();
@@ -445,10 +400,14 @@
       $('#wrd-reconcile-bulk-profile-id').val('0');
     });
 
-    $(document).on('change', '.wrd-reconcile-select, .wrd-reconcile-select-all', function(){
-      if ($(this).hasClass('wrd-reconcile-select-all')){
-        $('input.wrd-reconcile-select').prop('checked', $(this).is(':checked'));
-      }
+    $(document).on('change click', '.wrd-reconcile-select-all', function(){
+      var checked = $(this).is(':checked');
+      $('input.wrd-reconcile-select').prop('checked', checked);
+      $('.wrd-reconcile-select-all').not(this).prop('checked', checked).prop('indeterminate', false);
+      updateSelectedCount();
+    });
+
+    $(document).on('change', '.wrd-reconcile-select', function(){
       updateSelectedCount();
     });
 
@@ -464,12 +423,6 @@
     $(document).on('change', '#wrd-reconcile-bulk-action', function(){
       syncBulkControls();
       setBulkStatus('', '');
-    });
-
-    $(document).on('keydown', function(event){
-      if (event.key === 'Escape'){
-        closeRowRulePicker();
-      }
     });
 
     syncFilterControls();
