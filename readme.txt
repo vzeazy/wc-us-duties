@@ -3,25 +3,25 @@ Contributors: webmemediagroup
 Tags: woocommerce, customs, duties, import duties, us, hs code, hts, cusma, ddp, dap
 Requires at least: 6.1
 Tested up to: 6.6
-Stable tag: 0.2.0
+Stable tag: 0.2.1
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-In the era of 'America First' tariffs, where imports get taxed like they're crossing the border wall, this plugin helps you estimate US duties at checkout and manage customs profiles like a tariff titan. HPOS-compatible, with JSON/CSV importers, WPML-ready currency, and CUSMA handling – because even trade deals need a MAGA makeover!
+Estimate US import duties at checkout, manage reusable customs duty rules, and reconcile product classification data across your WooCommerce catalog. HPOS-compatible, with JSON/CSV import tools, multi-currency support, and CUSMA handling.
 
 == Description ==
 
-Welcome to WooCommerce US Duties & Customs, your hilarious guide to the Trump tariff jungle! Slap those import duties on your customers' purchases and watch the profits soar higher than a Trump rally crowd. Manage customs profiles with HS codes and rates, support CUSMA duty-free for our northern and southern amigos, grab live FX rates from exchangerate.host, and stay WPML-ready for when the world speaks in tongues. Import data from Zonos JSON or CSV, bulk-assign customs fields, and turn your WooCommerce store into a tariff-teering machine – 'Make America Expensive Again'!
+WooCommerce US Duties & Customs helps merchants estimate landed duty costs, manage reusable duty rules, and keep product customs data accurate across products and variations. It supports checkout estimation, rule import/export, category inheritance, and a streamlined reconciliation workflow for resolving missing or mismatched customs fields at scale.
 
 Features:
-- Checkout fee (DDP) or info-only (DAP) – because tariffs are the new black!
-- Line-item CUSMA duty-free for CA/US origins (configurable) – NAFTA who? CUSMA rules!
-- Shipping channel mapping (postal vs commercial) – choose your poison, tariff style.
-- JSON/CSV importers for profiles; CSV assigner for products – data import faster than Trump's tweet storms.
-- Admin grid with search, pagination, edit, bulk delete, and impacted products drilldown – manage like a boss, tariff edition.
-- WPML multi-currency compatibility; exchangerate.host FX cache – because dollars aren't the only currency in Trump's world.
-- HPOS compatible; order snapshot stored in meta – future-proof like Trump's hair.
+- Checkout fee (DDP) or info-only (DAP) duty presentation.
+- Reusable duty rules keyed by HS code and origin, with JSON/CSV import and export.
+- Category inheritance for HS code and origin defaults.
+- Product reconciliation workflow with stock visibility, inline HS lookup, bulk actions, and duty-rate matching.
+- Product and variation support, including Section 232 value handling.
+- WPML multi-currency compatibility and exchangerate.host FX caching.
+- HPOS compatible; order duty snapshots stored in meta.
 
 == Installation ==
 
@@ -38,6 +38,17 @@ You bet! Basic fee settings are here, with detailed brokerage/MPF tables coming 
 Not yet, but the structure's in place. We're optimizing faster than Trump changes his mind on trade deals!
 
 == Changelog ==
+
+= 0.2.1 =
+* Major reconciliation workflow overhaul with cleaner inline editing and a denser table layout.
+* Added stock status column, filtering, and bulk stock updates on the reconciliation screen.
+* Moved saved duty rule lookup directly into the HS field autocomplete while preserving custom HS entry.
+* Removed the separate action column and moved row save controls inline into the HS field cell.
+* Added matched duty-rate visibility in the Duty column and moved provenance/source metadata into Status.
+* Improved variation visibility, compact status and stock pills, and tighter column widths for HS, origin, and 232 values.
+* Fixed header select-all behavior for reconciliation bulk controls.
+* Fixed Section 232 value saving from reconciliation for variations by forcing explicit mode when needed.
+* Bumped plugin/assets version to 0.2.1 for cache busting.
 
 = 0.2.0 =
 * Added HS Manager mode directly inside `Products > All Products` as a dedicated catalog view.

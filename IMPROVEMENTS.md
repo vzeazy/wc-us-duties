@@ -1,6 +1,6 @@
 # Duty Rate System Improvements - Implementation Summary
 
-## 2026-03-13 - Reconciliation Stock Status Visibility (Planned)
+## 2026-03-13 - Reconciliation Stock Status Visibility (Implemented in v0.2.1)
 
 ### Goal
 Add stock status visibility and filtering to the Product Reconciliation screen so operators can prioritize customs-ready products by sellable inventory state without turning the page into an inventory management tool.

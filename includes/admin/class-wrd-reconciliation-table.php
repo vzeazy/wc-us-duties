@@ -47,7 +47,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'stock_status' => __('Stock Status', 'woocommerce-us-duties'),
             'hs_code' => __('HS Code', 'woocommerce-us-duties'),
             'origin' => __('Origin', 'woocommerce-us-duties'),
-            'metal_232' => __('232 USD', 'woocommerce-us-duties'),
+            'metal_232' => __('Metal USD', 'woocommerce-us-duties'),
             'status' => __('Status', 'woocommerce-us-duties'),
         ];
     }
@@ -99,12 +99,18 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     protected function column_hs_code($item) {
         $pid = (int)$item['id'];
         $hs_id = 'wrd-hs-' . $pid;
+        $rule_id = 'wrd-rule-' . $pid;
         return '<label class="screen-reader-text" for="' . esc_attr($hs_id) . '">' . esc_html__('HS code', 'woocommerce-us-duties') . '</label>'
              . '<div class="wrd-hs-editor" data-product="' . esc_attr($pid) . '">'
-             . '<input type="text" id="' . esc_attr($hs_id) . '" class="wrd-hs" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('HS code or saved rule', 'woocommerce-us-duties') . '" value="' . esc_attr($item['hs_code']) . '" />'
+             . '<div class="wrd-hs-editor-row">'
+             . '<input type="text" id="' . esc_attr($hs_id) . '" class="wrd-hs" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('HS code', 'woocommerce-us-duties') . '" value="' . esc_attr($item['hs_code']) . '" />'
+             . '<button type="button" class="button button-small wrd-rule-toggle" data-product="' . esc_attr($pid) . '" aria-expanded="false" aria-controls="' . esc_attr($rule_id) . '" title="' . esc_attr__('Find saved duty rule', 'woocommerce-us-duties') . '"><span class="dashicons dashicons-search"></span><span class="screen-reader-text">' . esc_html__('Find saved duty rule', 'woocommerce-us-duties') . '</span></button>'
+             . '<button type="button" class="button button-small button-primary wrd-apply" data-product="' . esc_attr($pid) . '" title="' . esc_attr__('Save row', 'woocommerce-us-duties') . '"><span class="dashicons dashicons-saved"></span><span class="screen-reader-text">' . esc_html__('Save row', 'woocommerce-us-duties') . '</span></button>'
+             . '</div>'
              . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
              . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
-             . '<div class="wrd-hs-editor-footer"><button type="button" class="button button-secondary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Save', 'woocommerce-us-duties') . '</button><span class="wrd-status" aria-live="polite" role="status"></span></div>'
+             . '<div class="wrd-rule-lookup-wrap is-hidden" id="' . esc_attr($rule_id) . '"><label class="screen-reader-text" for="' . esc_attr($rule_id) . '-input">' . esc_html__('Saved duty rule lookup', 'woocommerce-us-duties') . '</label><input type="text" id="' . esc_attr($rule_id) . '-input" class="wrd-rule-lookup" placeholder="' . esc_attr__('Search saved duty rule', 'woocommerce-us-duties') . '" /></div>'
+             . '<div class="wrd-hs-editor-footer"><span class="wrd-status" aria-live="polite" role="status"></span></div>'
              . '</div>';
     }
 
@@ -120,7 +126,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $metal_id = 'wrd-232-' . $pid;
         $value = $item['metal_232'];
         return '<label class="screen-reader-text" for="' . esc_attr($metal_id) . '">' . esc_html__('Section 232 metal value in USD', 'woocommerce-us-duties') . '</label>'
-             . '<input type="number" id="' . esc_attr($metal_id) . '" class="wrd-232-metal" data-product="' . esc_attr($pid) . '" min="0" step="0.01" placeholder="' . esc_attr__('232 USD', 'woocommerce-us-duties') . '" value="' . esc_attr($value) . '" />';
+             . '<input type="number" id="' . esc_attr($metal_id) . '" class="wrd-232-metal" data-product="' . esc_attr($pid) . '" min="0" step="0.01" placeholder="' . esc_attr__('0.00', 'woocommerce-us-duties') . '" value="' . esc_attr($value) . '" />';
     }
 
     public function get_status_counts(): array {

@@ -167,12 +167,32 @@
     $('#wrd-reconcile-bulk-rule-field').toggleClass('is-hidden', action !== 'copy_rule');
   }
 
+  function closeRowRuleLookup($row){
+    if (!$row || !$row.length){
+      return;
+    }
+    $row.find('.wrd-rule-lookup-wrap').addClass('is-hidden');
+    $row.find('.wrd-rule-toggle').attr('aria-expanded', 'false');
+    $row.find('.wrd-rule-lookup').val('');
+  }
+
+  function openRowRuleLookup($row){
+    if (!$row || !$row.length){
+      return;
+    }
+    $('tr').find('.wrd-rule-lookup-wrap').addClass('is-hidden');
+    $('tr').find('.wrd-rule-toggle').attr('aria-expanded', 'false');
+    $row.find('.wrd-rule-lookup-wrap').removeClass('is-hidden');
+    $row.find('.wrd-rule-toggle').attr('aria-expanded', 'true');
+    $row.find('.wrd-rule-lookup').trigger('focus');
+  }
+
   function attachAutocomplete(context){
     if (typeof $.fn.autocomplete !== 'function' || typeof WRDReconcile === 'undefined') {
       return;
     }
 
-    $(context).find('.column-hs_code input.wrd-hs, #wrd-reconcile-bulk-rule').each(function(){
+    $(context).find('.column-hs_code input.wrd-rule-lookup, #wrd-reconcile-bulk-rule').each(function(){
       var $input = $(this);
       if ($input.data('wrdBound')) {
         return;
@@ -206,7 +226,7 @@
             setRowRuleSelection($row, item);
             syncRowApplyState($row);
             setRowStatus($row, '', '');
-            $input.val(item.hs || '');
+            closeRowRuleLookup($row);
           }
           return false;
         }
@@ -362,6 +382,17 @@
       }
     });
 
+    $(document).on('click', '.wrd-rule-toggle', function(event){
+      event.preventDefault();
+      var $row = $(this).closest('tr');
+      var isOpen = !$row.find('.wrd-rule-lookup-wrap').hasClass('is-hidden');
+      if (isOpen){
+        closeRowRuleLookup($row);
+      } else {
+        openRowRuleLookup($row);
+      }
+    });
+
     $(document).on('keydown', '.column-hs_code input.wrd-hs, .column-origin input.wrd-cc, .column-metal_232 input.wrd-232-metal', function(event){
       if (event.key === 'Enter'){
         event.preventDefault();
@@ -388,6 +419,13 @@
       syncRowApplyState($(this).closest('tr'));
     });
 
+    $(document).on('keydown', '.column-hs_code input.wrd-rule-lookup', function(event){
+      if (event.key === 'Escape'){
+        event.preventDefault();
+        closeRowRuleLookup($(this).closest('tr'));
+      }
+    });
+
     $(document).on('input', '.column-metal_232 input.wrd-232-metal', function(){
       syncRowApplyState($(this).closest('tr'));
     });
@@ -409,6 +447,15 @@
 
     $(document).on('change', '.wrd-reconcile-select', function(){
       updateSelectedCount();
+    });
+
+    $(document).on('mousedown', function(event){
+      var $target = $(event.target);
+      if (!$target.closest('.wrd-rule-lookup-wrap, .wrd-rule-toggle, .ui-autocomplete').length){
+        $('tr').each(function(){
+          closeRowRuleLookup($(this));
+        });
+      }
     });
 
     $(document).on('click', '#wrd-reconcile-bulk-apply', function(event){
