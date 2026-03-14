@@ -61,9 +61,15 @@
 }
 
 .wp-list-table .column-assign .wrd-row-actions {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
+}
+
+.wp-list-table .column-assign input.wrd-rule-lookup {
+    min-width: 180px;
+    width: 100%;
 }
 
 .wp-list-table .column-assign .wrd-apply.is-idle {

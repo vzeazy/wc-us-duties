@@ -936,7 +936,7 @@ class WRD_Admin {
             }
         </style>';
 
-        echo '<p class="wrd-import-intro">' . esc_html__('Import and export profile/product data, plus run migration utilities. Start with dry-run for operations that update or delete data.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-intro">' . esc_html__('Use these tools to download your customs data, upload duty rules, update products in bulk, and run cleanup tasks. Start with dry-run for anything that changes or deletes data.', 'woocommerce-us-duties') . '</p>';
 
         foreach ($notices as $notice) {
             echo '<div class="' . esc_attr($notice['class']) . ' wrd-import-notice"><p>' . esc_html($notice['message']) . '</p>';
@@ -951,15 +951,15 @@ class WRD_Admin {
         echo '<div class="postbox">';
         echo '<h2 class="hndle"><span>' . esc_html__('Export', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Download current duty profiles or product customs assignments as CSV.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Download a CSV of your saved duty rules or a CSV of product customs details and assignments.', 'woocommerce-us-duties') . '</p>';
         echo '<p class="wrd-import-actions"><a href="' . esc_url($export_profiles_url) . '" class="button">' . esc_html__('Export Profiles CSV', 'woocommerce-us-duties') . '</a> <a href="' . esc_url($export_products_url) . '" class="button button-primary">' . esc_html__('Export Products CSV', 'woocommerce-us-duties') . '</a></p>';
         echo '</div>';
         echo '</div>';
 
         echo '<div class="postbox">';
-        echo '<h2 class="hndle"><span>' . esc_html__('Import Profiles (CSV)', 'woocommerce-us-duties') . '</span></h2>';
+        echo '<h2 class="hndle"><span>' . esc_html__('Import Duty Rules (CSV)', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Import profile records from CSV. Header mapping is optional and available under Advanced.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Upload a CSV of saved duty rules. Each rule usually includes a product description, country of origin, HS code, and duty rates. Header mapping is optional under Advanced.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('wrd_import_csv', 'wrd_import_nonce');
         echo '<p><input type="file" name="wrd_csv" accept=".csv" required /></p>';
@@ -982,7 +982,7 @@ class WRD_Admin {
         echo '<label>' . esc_html__('Notes', 'woocommerce-us-duties') . ' <input type="text" name="map_profile_notes" placeholder="notes" /></label>';
         echo '</p>';
         echo '</details>';
-        submit_button(__('Import Profiles CSV', 'woocommerce-us-duties'), 'primary', '', false);
+        submit_button(__('Import Duty Rules CSV', 'woocommerce-us-duties'), 'primary', '', false);
         echo '</form>';
         echo '</div>';
         echo '</div>';
@@ -990,7 +990,7 @@ class WRD_Admin {
         echo '<div class="postbox">';
         echo '<h2 class="hndle"><span>' . esc_html__('Import Duties (JSON)', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Import duties JSON. The default parser supports Zonos-style files with an entries[] root and channel rates under postal.rates/commercial.rates.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Upload a duty-rate JSON file from a provider such as Zonos. The importer creates or updates saved duty rules from that file.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('wrd_import_json', 'wrd_import_json_nonce');
         echo '<p><input type="file" name="wrd_json" accept="application/json,.json" required /></p>';
@@ -1037,7 +1037,7 @@ class WRD_Admin {
         echo '<div class="postbox">';
         echo '<h2 class="hndle"><span>' . esc_html__('Assign Customs to Products (CSV)', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Upload a CSV with columns for product ID/SKU, HS code, country code, and optionally description plus Section 232 inputs. HS code + country is preferred. Header mapping is optional under Advanced.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Upload a CSV to fill in customs details on products in bulk, such as HS code, country of origin, description, and Section 232 fields. Header mapping is optional under Advanced.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('wrd_products_import', 'wrd_products_import_nonce');
         echo '<p><input type="file" name="wrd_products_csv" accept=".csv" required /></p>';
@@ -1072,10 +1072,10 @@ class WRD_Admin {
         echo '<div class="postbox">';
         echo '<h2 class="hndle"><span>' . esc_html__('Data Cleanup & Migration', 'woocommerce-us-duties') . '</span></h2>';
         echo '<div class="inside">';
-        echo '<p class="description">' . esc_html__('Safe maintenance actions for duplicate profiles and missing HS code population.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="description">' . esc_html__('Maintenance tools to clean up duplicate duty rules and fill in missing HS codes on products.', 'woocommerce-us-duties') . '</p>';
 
         echo '<h3 style="margin-top:0;">' . esc_html__('Cleanup Duplicate Profiles', 'woocommerce-us-duties') . '</h3>';
-        echo '<p class="wrd-import-form-note">' . esc_html__('Merge duplicate profiles with the same HS code and country code. Product assignments are moved to the canonical profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-form-note">' . esc_html__('Merge duplicate duty rules that share the same HS code and country of origin. Any linked products are reassigned automatically.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post">';
         wp_nonce_field('wrd_cleanup_duplicates', 'wrd_cleanup_nonce');
         echo '<p><label><input type="checkbox" name="cleanup_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
@@ -1084,7 +1084,7 @@ class WRD_Admin {
 
         echo '<hr />';
         echo '<h3>' . esc_html__('Migrate Products to HS Codes', 'woocommerce-us-duties') . '</h3>';
-        echo '<p class="wrd-import-form-note">' . esc_html__('For products missing HS codes, match profile by description + country and populate HS code from the profile.', 'woocommerce-us-duties') . '</p>';
+        echo '<p class="wrd-import-form-note">' . esc_html__('For products missing an HS code, look for a matching saved duty rule using description and country of origin, then copy the HS code onto the product.', 'woocommerce-us-duties') . '</p>';
         echo '<form method="post">';
         wp_nonce_field('wrd_migrate_hs', 'wrd_migrate_hs_nonce');
         echo '<p><label><input type="checkbox" name="migrate_dry_run" value="1" checked /> ' . esc_html__('Dry run (preview only)', 'woocommerce-us-duties') . '</label></p>';
@@ -3353,17 +3353,21 @@ class WRD_Admin {
                 wp_enqueue_script(
                     'wrd-admin-reconcile',
                     WRD_US_DUTY_URL . 'assets/admin-reconcile.js',
-                    ['jquery'],
+                    ['jquery', 'jquery-ui-autocomplete'],
                     WRD_US_DUTY_VERSION,
                     true
                 );
                 wp_localize_script('wrd-admin-reconcile', 'WRDReconcile', [
                     'ajax' => admin_url('admin-ajax.php'),
                     'nonce' => wp_create_nonce('wrd_reconcile_nonce'),
+                    'searchNonce' => wp_create_nonce('wrd_search_profiles'),
                     'i18n' => [
                         'missing' => __('HS code and origin are required.', 'woocommerce-us-duties'),
                         'missing232' => __('Section 232 metal value is required for this profile.', 'woocommerce-us-duties'),
                         'invalidCountry' => __('Origin must be a 2-letter country code.', 'woocommerce-us-duties'),
+                        'chooseRule' => __('Choose a saved rule first.', 'woocommerce-us-duties'),
+                        'actionRequired' => __('Choose a bulk action first.', 'woocommerce-us-duties'),
+                        'ruleNotFound' => __('The selected saved rule could not be found. Please choose it again.', 'woocommerce-us-duties'),
                         'saving' => __('Saving...', 'woocommerce-us-duties'),
                         'saved' => __('Saved', 'woocommerce-us-duties'),
                         'bulkSaving' => __('Applying to selected rows...', 'woocommerce-us-duties'),
@@ -3398,6 +3402,7 @@ class WRD_Admin {
             $hs = !empty($r['hs_code']) ? $r['hs_code'] : '';
             $cc = strtoupper($r['country_code']);
             $desc = $r['description_raw'];
+            $profile = ($hs !== '' && $cc !== '') ? WRD_DB::get_profile_by_hs_country($hs, $cc) : null;
 
             // Format label: "HSCODE (CC): Description" or "Description (CC)" if no HS code
             if ($hs) {
@@ -3413,9 +3418,58 @@ class WRD_Admin {
                 'hs' => $hs,
                 'cc' => $cc,
                 'desc' => $desc,
+                'profile_id' => (int) ($profile['id'] ?? 0),
+                'requires_232' => $profile && $this->profile_has_section_232($profile),
             ];
         }
         wp_send_json($out);
+    }
+
+    private function resolve_reconciliation_profile_input(int $profile_id, string $hs_code, string $cc): array {
+        if ($profile_id > 0) {
+            $profile = WRD_DB::get_profile_by_id($profile_id);
+            if (!$profile) {
+                return [
+                    'valid' => false,
+                    'error' => 'rule_not_found',
+                ];
+            }
+
+            $resolved_hs = trim((string) ($profile['hs_code'] ?? ''));
+            $resolved_cc = strtoupper(trim((string) ($profile['country_code'] ?? '')));
+
+            if ($resolved_hs === '' || $resolved_cc === '') {
+                return [
+                    'valid' => false,
+                    'error' => 'invalid_params',
+                ];
+            }
+
+            return [
+                'valid' => true,
+                'profile_id' => (int) ($profile['id'] ?? 0),
+                'profile' => $profile,
+                'hs_code' => $resolved_hs,
+                'cc' => $resolved_cc,
+            ];
+        }
+
+        if ($hs_code === '' || $cc === '') {
+            return [
+                'valid' => false,
+                'error' => 'invalid_params',
+            ];
+        }
+
+        $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
+
+        return [
+            'valid' => true,
+            'profile_id' => (int) ($profile['id'] ?? 0),
+            'profile' => $profile,
+            'hs_code' => $hs_code,
+            'cc' => $cc,
+        ];
     }
 
     // Assign selected description+country to a product via AJAX (from Reconciliation UI)
@@ -3425,13 +3479,19 @@ class WRD_Admin {
         $pid = isset($_POST['product_id']) ? (int) $_POST['product_id'] : 0;
         $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
         $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+        $profile_id = isset($_POST['profile_id']) ? (int) $_POST['profile_id'] : 0;
         $metal_232 = isset($_POST['metal_value_232']) ? trim(sanitize_text_field(wp_unslash($_POST['metal_value_232']))) : null;
-        if ($pid <= 0 || $hs_code === '' || $cc === '') { wp_send_json_error(['message' => 'invalid_params'], 400); }
+        if ($pid <= 0) { wp_send_json_error(['message' => 'invalid_params'], 400); }
         $product = wc_get_product($pid);
         if (!$product) { wp_send_json_error(['message' => 'not_found'], 404); }
+        $resolved = $this->resolve_reconciliation_profile_input($profile_id, $hs_code, $cc);
+        if (empty($resolved['valid'])) {
+            $code = ($resolved['error'] ?? 'invalid_params') === 'rule_not_found' ? 404 : 400;
+            wp_send_json_error(['message' => $resolved['error'] ?? 'invalid_params'], $code);
+        }
         $changes = [
-            'hs_code' => $hs_code,
-            'origin' => $cc,
+            'hs_code' => (string) $resolved['hs_code'],
+            'origin' => (string) $resolved['cc'],
         ];
         if ($metal_232 !== null) {
             $changes['metal_value_232'] = $metal_232;
@@ -3439,7 +3499,7 @@ class WRD_Admin {
         self::upsert_product_classification($pid, $changes);
 
         // Optionally return matched profile data.
-        $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
+        $profile = $resolved['profile'];
         // Return a small payload with status and maybe matched profile data
         $ratePostal = 0.0; $rateComm = 0.0;
         if ($profile && is_array($profile)) {
@@ -3449,7 +3509,14 @@ class WRD_Admin {
                 $rateComm = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
             }
         }
-        wp_send_json_success(['postal_rate' => $ratePostal, 'commercial_rate' => $rateComm]);
+        wp_send_json_success([
+            'postal_rate' => $ratePostal,
+            'commercial_rate' => $rateComm,
+            'hs_code' => (string) $resolved['hs_code'],
+            'cc' => (string) $resolved['cc'],
+            'profile_id' => (int) ($resolved['profile_id'] ?? 0),
+            'requires_232' => $profile && $this->profile_has_section_232($profile),
+        ]);
     }
 
     // Assign HS/origin to multiple products via AJAX (from Reconciliation UI bulk controls)
@@ -3463,10 +3530,16 @@ class WRD_Admin {
         })));
         $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
         $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+        $profile_id = isset($_POST['profile_id']) ? (int) $_POST['profile_id'] : 0;
         $metal_232 = isset($_POST['metal_value_232']) ? trim(sanitize_text_field(wp_unslash($_POST['metal_value_232']))) : null;
 
-        if (empty($product_ids) || $hs_code === '' || $cc === '') {
+        if (empty($product_ids)) {
             wp_send_json_error(['message' => 'invalid_params'], 400);
+        }
+        $resolved = $this->resolve_reconciliation_profile_input($profile_id, $hs_code, $cc);
+        if (empty($resolved['valid'])) {
+            $code = ($resolved['error'] ?? 'invalid_params') === 'rule_not_found' ? 404 : 400;
+            wp_send_json_error(['message' => $resolved['error'] ?? 'invalid_params'], $code);
         }
 
         $updated = 0;
@@ -3478,8 +3551,8 @@ class WRD_Admin {
                 continue;
             }
             $changes = [
-                'hs_code' => $hs_code,
-                'origin' => $cc,
+                'hs_code' => (string) $resolved['hs_code'],
+                'origin' => (string) $resolved['cc'],
             ];
             if ($metal_232 !== null && $metal_232 !== '') {
                 $changes['metal_value_232'] = $metal_232;
@@ -3491,6 +3564,10 @@ class WRD_Admin {
         wp_send_json_success([
             'updated' => $updated,
             'skipped' => $skipped,
+            'hs_code' => (string) $resolved['hs_code'],
+            'cc' => (string) $resolved['cc'],
+            'profile_id' => (int) ($resolved['profile_id'] ?? 0),
+            'requires_232' => !empty($resolved['profile']) && $this->profile_has_section_232($resolved['profile']),
         ]);
     }
 
@@ -4974,6 +5051,7 @@ class WRD_Admin {
             .wrd-reconcile-inline-fields select,
             .wrd-reconcile-inline-fields input[type="text"],
             .wrd-reconcile-inline-fields input[type="number"] { min-width: 160px; margin: 0; }
+            .wrd-reconcile-field.is-hidden { display: none; }
             .wrd-reconcile-inline-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; }
             .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-fields { flex-wrap: wrap; }
             .wrd-reconcile-utility-row--bulk .wrd-reconcile-inline-fields input[type="text"],
@@ -4986,6 +5064,9 @@ class WRD_Admin {
             .wrd-reconcile-selected-count { color: #646970; }
             .wrd-reconcile-bulk-status { min-height: 20px; display: inline-flex; align-items: center; color: #646970; font-size: 12px; min-width: 0; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .wrd-reconcile-help { margin: 0; color: #646970; font-size: 12px; }
+            .wrd-rule-lookup { width: 100%; min-width: 180px; }
+            .wrd-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+            .wrd-row-actions .wrd-status { min-width: 40px; }
             .wrd-reconcile-table .tablenav.top { margin: 0; padding: 6px 10px; border-bottom: 1px solid #dcdcde; }
             .wrd-reconcile-table .tablenav.bottom { display: none; }
             .wrd-reconcile-table .wp-list-table { margin-top: 0; border-top: 0; }
@@ -5053,6 +5134,8 @@ class WRD_Admin {
 
         echo '<div class="wrd-reconcile-utility-row wrd-reconcile-utility-row--bulk" id="wrd-reconcile-bulk-row">';
         echo '<div class="wrd-reconcile-inline-fields">';
+        echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Action', 'woocommerce-us-duties') . '</span><select id="wrd-reconcile-bulk-action"><option value="set_values">' . esc_html__('Set entered values', 'woocommerce-us-duties') . '</option><option value="copy_rule">' . esc_html__('Copy from saved rule', 'woocommerce-us-duties') . '</option></select></label>';
+        echo '<label class="wrd-reconcile-field is-hidden" id="wrd-reconcile-bulk-rule-field"><span class="wrd-reconcile-field-label">' . esc_html__('Saved Rule', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-rule" placeholder="' . esc_attr__('Search saved rule', 'woocommerce-us-duties') . '" /><input type="hidden" id="wrd-reconcile-bulk-profile-id" value="0" /><input type="hidden" id="wrd-reconcile-bulk-requires-232" value="0" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk HS', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-hs" placeholder="' . esc_attr__('HS Code', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk Origin', 'woocommerce-us-duties') . '</span><input type="text" id="wrd-reconcile-bulk-cc" maxlength="2" placeholder="' . esc_attr__('ISO-2', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Bulk 232 Metal USD', 'woocommerce-us-duties') . '</span><input type="number" id="wrd-reconcile-bulk-metal" min="0" step="0.01" placeholder="' . esc_attr__('Optional', 'woocommerce-us-duties') . '" /></label>';

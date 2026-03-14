@@ -54,15 +54,38 @@
     var hs = normalizeHs($row.find('input.wrd-hs').val());
     var cc = normalizeCountryCode($row.find('input.wrd-cc').val());
     var metal = normalizeMetal($row.find('input.wrd-232-metal').val());
+    var profileId = parseInt($row.find('input.wrd-selected-profile-id').val(), 10) || 0;
     $row.find('input.wrd-cc').val(cc);
     $row.find('input.wrd-232-metal').val(metal);
-    return { hs: hs, cc: cc, metal: metal };
+    return { hs: hs, cc: cc, metal: metal, profileId: profileId };
   }
 
   function setRowBaseline($row, hs, cc, metal){
     $row.data('wrdInitialHs', normalizeHs(hs));
     $row.data('wrdInitialCc', normalizeCountryCode(cc));
     $row.data('wrdInitialMetal', normalizeMetal(metal));
+  }
+
+  function clearRowRuleSelection($row){
+    $row.find('input.wrd-selected-profile-id').val('0');
+    $row.find('.wrd-requires-232').val('0');
+  }
+
+  function setRowRuleSelection($row, item){
+    var profileId = parseInt(item && item.profile_id, 10) || 0;
+    $row.find('input.wrd-selected-profile-id').val(String(profileId));
+    $row.find('.wrd-requires-232').val(item && item.requires_232 ? '1' : '0');
+  }
+
+  function clearBulkRuleSelection(){
+    $('#wrd-reconcile-bulk-profile-id').val('0');
+    $('#wrd-reconcile-bulk-requires-232').val('0');
+  }
+
+  function setBulkRuleSelection(item){
+    var profileId = parseInt(item && item.profile_id, 10) || 0;
+    $('#wrd-reconcile-bulk-profile-id').val(String(profileId));
+    $('#wrd-reconcile-bulk-requires-232').val(item && item.requires_232 ? '1' : '0');
   }
 
   function syncRowApplyState($row){
@@ -121,6 +144,56 @@
     $('#wrd-reconcile-clear-filters').toggleClass('is-hidden', !hasFilters);
   }
 
+  function syncBulkControls(){
+    var action = $('#wrd-reconcile-bulk-action').val() || 'set_values';
+    $('#wrd-reconcile-bulk-rule-field').toggleClass('is-hidden', action !== 'copy_rule');
+  }
+
+  function attachAutocomplete(context){
+    if (typeof $.fn.autocomplete !== 'function' || typeof WRDReconcile === 'undefined') {
+      return;
+    }
+
+    $(context).find('.wrd-rule-lookup, #wrd-reconcile-bulk-rule').each(function(){
+      var $input = $(this);
+      if ($input.data('wrdBound')) {
+        return;
+      }
+      $input.data('wrdBound', true);
+      $input.autocomplete({
+        minLength: 2,
+        source: function(req, resp){
+          $.getJSON(WRDReconcile.ajax, {
+            action: 'wrd_search_profiles',
+            nonce: WRDReconcile.searchNonce,
+            term: req.term
+          }, function(data){
+            resp(data || []);
+          });
+        },
+        select: function(event, ui){
+          event.preventDefault();
+          var item = ui.item || {};
+          var $row = $input.closest('tr');
+          if ($row.length){
+            $row.find('input.wrd-hs').val(item.hs || '');
+            $row.find('input.wrd-cc').val(item.cc || '');
+            setRowRuleSelection($row, item);
+            syncRowApplyState($row);
+            setRowStatus($row, '', '');
+          } else {
+            $('#wrd-reconcile-bulk-hs').val(item.hs || '');
+            $('#wrd-reconcile-bulk-cc').val(normalizeCountryCode(item.cc || ''));
+            setBulkRuleSelection(item);
+            setBulkStatus('', '');
+          }
+          $input.val(item.label || item.value || '');
+          return false;
+        }
+      });
+    });
+  }
+
   function applySingle(productId){
     var $row = getRowByProductId(productId);
     if (!$row.length){
@@ -150,17 +223,25 @@
       product_id: productId,
       hs_code: values.hs,
       cc: values.cc,
+      profile_id: values.profileId,
       metal_value_232: values.metal
     }).done(function(resp){
       if (resp && resp.success){
-        setRowBaseline($row, values.hs, values.cc, values.metal);
+        var data = resp.data || {};
+        $row.find('input.wrd-hs').val(data.hs_code || values.hs);
+        $row.find('input.wrd-cc').val(data.cc || values.cc);
+        $row.find('input.wrd-selected-profile-id').val(String(parseInt(data.profile_id, 10) || 0));
+        $row.find('.wrd-requires-232').val(data.requires_232 ? '1' : '0');
+        setRowBaseline($row, data.hs_code || values.hs, data.cc || values.cc, values.metal);
         syncRowApplyState($row);
         setRowStatus($row, WRDReconcile.i18n.saved, 'success');
       } else {
-        setRowStatus($row, WRDReconcile.i18n.error, 'error');
+        var message = (resp && resp.data && resp.data.message === 'rule_not_found') ? WRDReconcile.i18n.ruleNotFound : WRDReconcile.i18n.error;
+        setRowStatus($row, message, 'error');
       }
-    }).fail(function(){
-      setRowStatus($row, WRDReconcile.i18n.error, 'error');
+    }).fail(function(xhr){
+      var message = (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message === 'rule_not_found') ? WRDReconcile.i18n.ruleNotFound : WRDReconcile.i18n.error;
+      setRowStatus($row, message, 'error');
     }).always(function(){
       $button.prop('disabled', false).removeClass('updating-message');
     });
@@ -178,15 +259,32 @@
       return;
     }
 
+    var action = $('#wrd-reconcile-bulk-action').val() || '';
+    if (!action){
+      setBulkStatus(WRDReconcile.i18n.actionRequired, 'error');
+      return;
+    }
+
     var hs = $.trim($('#wrd-reconcile-bulk-hs').val());
     var cc = normalizeCountryCode($('#wrd-reconcile-bulk-cc').val());
     var metal = normalizeMetal($('#wrd-reconcile-bulk-metal').val());
+    var profileId = parseInt($('#wrd-reconcile-bulk-profile-id').val(), 10) || 0;
+    var requires232 = String($('#wrd-reconcile-bulk-requires-232').val() || '') === '1';
     $('#wrd-reconcile-bulk-cc').val(cc);
     $('#wrd-reconcile-bulk-metal').val(metal);
+
+    if (action === 'copy_rule' && profileId <= 0){
+      setBulkStatus(WRDReconcile.i18n.chooseRule, 'error');
+      return;
+    }
 
     var validationError = validateValues(hs, cc);
     if (validationError){
       setBulkStatus(validationError, 'error');
+      return;
+    }
+    if (requires232 && metal === ''){
+      setBulkStatus(WRDReconcile.i18n.missing232, 'error');
       return;
     }
 
@@ -200,22 +298,27 @@
       product_ids: selected,
       hs_code: hs,
       cc: cc,
+      profile_id: profileId,
       metal_value_232: metal
     }).done(function(resp){
       if (resp && resp.success){
         setBulkStatus(WRDReconcile.i18n.bulkSaved.replace('%d', resp.data.updated || selected.length), 'success');
         window.location.reload();
       } else {
-        setBulkStatus(WRDReconcile.i18n.error, 'error');
+        var message = (resp && resp.data && resp.data.message === 'rule_not_found') ? WRDReconcile.i18n.ruleNotFound : WRDReconcile.i18n.error;
+        setBulkStatus(message, 'error');
       }
-    }).fail(function(){
-      setBulkStatus(WRDReconcile.i18n.error, 'error');
+    }).fail(function(xhr){
+      var message = (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message === 'rule_not_found') ? WRDReconcile.i18n.ruleNotFound : WRDReconcile.i18n.error;
+      setBulkStatus(message, 'error');
     }).always(function(){
       $button.prop('disabled', false).removeClass('updating-message');
     });
   }
 
   $(function(){
+    attachAutocomplete(document.body);
+
     $('input.wrd-reconcile-select').closest('tr').each(function(){
       syncRowApplyState($(this));
     });
@@ -241,16 +344,32 @@
       var $input = $(this);
       $input.val(normalizeCountryCode($input.val()));
       if ($input.hasClass('wrd-cc')){
+        clearRowRuleSelection($input.closest('tr'));
         syncRowApplyState($input.closest('tr'));
+      } else {
+        clearBulkRuleSelection();
       }
     });
 
     $(document).on('input', '.column-hs_code input.wrd-hs', function(){
+      clearRowRuleSelection($(this).closest('tr'));
       syncRowApplyState($(this).closest('tr'));
     });
 
     $(document).on('input', '.column-metal_232 input.wrd-232-metal', function(){
       syncRowApplyState($(this).closest('tr'));
+    });
+
+    $(document).on('input', '#wrd-reconcile-bulk-hs', function(){
+      clearBulkRuleSelection();
+    });
+
+    $(document).on('input', '#wrd-reconcile-bulk-rule', function(){
+      $('#wrd-reconcile-bulk-profile-id').val('0');
+    });
+
+    $(document).on('input', '.wrd-rule-lookup', function(){
+      $(this).closest('tr').find('input.wrd-selected-profile-id').val('0');
     });
 
     $(document).on('change', '.wrd-reconcile-select, .wrd-reconcile-select-all', function(){
@@ -269,7 +388,13 @@
       syncFilterControls();
     });
 
+    $(document).on('change', '#wrd-reconcile-bulk-action', function(){
+      syncBulkControls();
+      setBulkStatus('', '');
+    });
+
     syncFilterControls();
+    syncBulkControls();
     updateSelectedCount();
   });
 })(jQuery);

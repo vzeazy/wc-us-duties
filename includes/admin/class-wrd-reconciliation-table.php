@@ -100,6 +100,9 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     protected function column_assign($item) {
         $pid = (int) $item['id'];
         return '<div class="wrd-row-actions" data-product="' . esc_attr($pid) . '">'
+             . '<label class="screen-reader-text" for="wrd-rule-' . esc_attr($pid) . '">' . esc_html__('Saved rule lookup', 'woocommerce-us-duties') . '</label>'
+             . '<input type="text" id="wrd-rule-' . esc_attr($pid) . '" class="wrd-rule-lookup" data-product="' . esc_attr($pid) . '" placeholder="' . esc_attr__('Search saved rule', 'woocommerce-us-duties') . '" />'
+             . '<input type="hidden" class="wrd-selected-profile-id" value="' . esc_attr((string) ($item['profile_id'] ?? 0)) . '" />'
              . '<input type="hidden" class="wrd-requires-232" value="' . (!empty($item['requires_232']) ? '1' : '0') . '" />'
              . '<button type="button" class="button button-primary button-small wrd-apply" data-product="' . esc_attr($pid) . '">' . esc_html__('Apply', 'woocommerce-us-duties') . '</button>'
              . '<span class="wrd-status" aria-live="polite" role="status"></span>'
@@ -288,6 +291,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'category_ids' => $this->resolve_category_ids($product),
             'hs_code' => $hs_code,
             'origin' => $origin,
+            'profile_id' => (int) ($matched_profile['id'] ?? $product->get_meta('_wrd_profile_id', true)),
             'metal_232' => $metal_232 === null ? '' : (string) round((float) $metal_232, 2),
             'requires_232' => $requires_232,
             'status_key' => $status_key,
