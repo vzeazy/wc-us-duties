@@ -1,5 +1,38 @@
 # Duty Rate System Improvements - Implementation Summary
 
+## 2026-03-14 - Reconciliation Duty Preview (Implemented in v0.2.2)
+
+### Goal
+Add an operator-facing duty preview directly inside the reconciliation Duty column so the team can inspect how the current rule would calculate duties under storefront logic without leaving the table.
+
+### Phase Tracking
+- [x] Phase 1: Reuse the existing duty engine as the preview truth source instead of creating a second calculation path.
+- [x] Phase 2: Add a reconciliation-row preview endpoint and compact admin popover UI.
+- [x] Phase 3: Lint/verify changed files and document assumptions.
+
+### Implementation Notes
+- Added a per-row `Preview` control in the reconciliation `Duty` column.
+- Preview requests run through the existing duty engine with current row inputs for HS, origin, and Section 232 metal value.
+- Preview assumes `US` destination and `qty = 1`, and surfaces those assumptions in the UI.
+- Preview renders both `postal` and `commercial` channel breakdowns and highlights the current default preview channel.
+- Component rows include basis, rate, applied/not-applied state, and duty amount for traceability.
+- CUSMA and missing Section 232 basis states are surfaced explicitly in the preview panel.
+
+### Milestone Notes
+- Phase 2 completed:
+  - Added a reconciliation AJAX preview endpoint that resolves the row's current rule context without requiring a save first.
+  - Added a reusable preview method to the duty engine so admin preview logic stays aligned with storefront duty rules.
+  - Added a compact inline popover in the reconciliation Duty cell with matched rule context, channel summaries, and component-level breakdowns.
+  - Kept the interaction click-based rather than hover-only to avoid overflow and give the breakdown enough room to be useful.
+- Phase 3 completed:
+  - Ran lint checks:
+    - `php -l includes/class-wrd-duty-engine.php`
+    - `php -l includes/class-wrd-admin.php`
+    - `php -l includes/admin/class-wrd-reconciliation-table.php`
+    - `node -c assets/admin-reconcile.js`
+  - All checks passed.
+  - Documented the preview assumptions in the UI so the panel is useful for review without pretending to be a full cart simulation.
+
 ## 2026-03-13 - Reconciliation Stock Status Visibility (Implemented in v0.2.1)
 
 ### Goal

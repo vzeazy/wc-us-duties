@@ -517,4 +517,84 @@ class WRD_Duty_Engine {
             'missing_232_basis' => !empty($breakdown['missing_232_basis']),
         ];
     }
+
+    public static function estimate_preview_for_product($product, array $args = []): ?array {
+        if (!$product instanceof \WC_Product) { return null; }
+
+        $settings = get_option(WRD_Settings::OPTION, []);
+        $currency = self::current_currency();
+        $qty = (int) max(1, (int) ($args['qty'] ?? 1));
+        $origin = strtoupper(trim((string) ($args['origin'] ?? '')));
+        $dest = strtoupper(trim((string) ($args['dest'] ?? 'US')));
+        $channel = strtolower(trim((string) ($args['channel'] ?? '')));
+        $profile = isset($args['profile']) && is_array($args['profile']) ? $args['profile'] : null;
+
+        if (!in_array($channel, ['postal', 'commercial'], true)) {
+            $def = $settings['default_shipping_channel'] ?? 'auto';
+            $channel = in_array($def, ['postal', 'commercial'], true) ? $def : self::decide_channel($origin);
+        }
+
+        if ($origin === '') {
+            $effective = WRD_Category_Settings::get_effective_hs_code($product);
+            $origin = strtoupper((string) ($effective['origin'] ?? ''));
+        }
+
+        if (!$profile) {
+            $profile_id = isset($args['profile_id']) ? (int) $args['profile_id'] : 0;
+            $hs_code = trim((string) ($args['hs_code'] ?? ''));
+
+            if ($profile_id > 0) {
+                $profile = WRD_DB::get_profile_by_id($profile_id);
+            }
+
+            if (!$profile && $hs_code !== '' && $origin !== '') {
+                $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            }
+        }
+
+        $preview_product = clone $product;
+        if (array_key_exists('metal_value_232', $args)) {
+            $metal_value = trim((string) $args['metal_value_232']);
+            $preview_product->update_meta_data('_wrd_232_metal_value_usd', $metal_value);
+            if ($preview_product->is_type('variation')) {
+                $preview_product->update_meta_data('_wrd_232_basis_mode', 'explicit');
+            }
+        }
+
+        $valueStore = (float) $preview_product->get_price() * $qty;
+        $valueUsd = self::to_usd($valueStore, $currency);
+
+        $isCusma = false;
+        $cusmaEnabled = !empty($settings['cusma_auto']);
+        $cusmaList = self::effective_cusma_country_list($settings);
+        if ($dest === 'US' && $cusmaEnabled && in_array($origin, $cusmaList, true)) {
+            $isCusma = true;
+        } elseif ($dest === 'US' && $profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
+            $isCusma = in_array('CUSMA', $profile['fta_flags'], true) && in_array($origin, ['CA', 'US', 'MX'], true);
+        }
+
+        $breakdown = $profile
+            ? self::compute_line_duty_breakdown($preview_product, $profile, $channel, $valueUsd, (float) $qty, $isCusma)
+            : ['total_rate_pct' => 0.0, 'total_duty_usd' => 0.0, 'components' => [], 'missing_232_basis' => false];
+
+        $dutyUsd = (float) $breakdown['total_duty_usd'];
+
+        return [
+            'channel' => $channel,
+            'currency' => $currency,
+            'qty' => $qty,
+            'origin' => $origin,
+            'dest' => $dest,
+            'cusma' => $isCusma,
+            'profile_found' => (bool) $profile,
+            'profile_id' => (int) ($profile['id'] ?? 0),
+            'line_value_store' => $valueStore,
+            'line_value_usd' => $valueUsd,
+            'rate_pct' => (float) $breakdown['total_rate_pct'],
+            'duty_usd' => $dutyUsd,
+            'duty_store' => WRD_FX::convert($dutyUsd, 'USD', $currency),
+            'components' => $breakdown['components'],
+            'missing_232_basis' => !empty($breakdown['missing_232_basis']),
+        ];
+    }
 }

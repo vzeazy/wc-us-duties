@@ -90,17 +90,18 @@ class WRD_Profiles_Table extends WP_List_Table {
         return sprintf(
             '<div class="wrd-description-cell" data-profile-id="%1$d">'
             . '<label class="screen-reader-text" for="wrd-description-%1$d">%2$s</label>'
-            . '<textarea id="wrd-description-%1$d" class="wrd-description-input" rows="3" data-initial="%3$s">%4$s</textarea>'
-            . '<div class="wrd-description-actions">'
-            . '<button type="button" class="button button-small button-primary wrd-description-save" disabled>%5$s</button>'
-            . '<button type="button" class="button button-small wrd-description-reset is-hidden">%6$s</button>'
-            . '<span class="wrd-description-status" aria-live="polite" role="status"></span>'
+            . '<div class="wrd-description-editor">'
+            . '<input id="wrd-description-%1$d" type="text" class="wrd-description-input" value="%3$s" data-initial="%3$s" spellcheck="false" />'
+            . '<div class="wrd-description-actions is-hidden">'
+            . '<button type="button" class="button button-small button-primary wrd-description-save" disabled aria-label="%5$s"><span class="dashicons dashicons-saved" aria-hidden="true"></span></button>'
+            . '<button type="button" class="button button-small wrd-description-reset" aria-label="%6$s"><span class="dashicons dashicons-undo" aria-hidden="true"></span></button>'
             . '</div>'
+            . '</div>'
+            . '<span class="wrd-description-status" aria-live="polite" role="status"></span>'
             . '</div>%7$s',
             (int) $item['id'],
             esc_attr__('Description', 'woocommerce-us-duties'),
             esc_attr($description),
-            esc_textarea($description),
             esc_html__('Save', 'woocommerce-us-duties'),
             esc_html__('Reset', 'woocommerce-us-duties'),
             $this->row_actions($actions)
@@ -136,12 +137,11 @@ class WRD_Profiles_Table extends WP_List_Table {
             return '';
         }
         return sprintf(
-            '<span class="wrd-notes-indicator" tabindex="0" aria-label="%1$s">'
+            '<span class="wrd-notes-indicator" tabindex="0" aria-label="%1$s" title="%2$s">'
             . '<span class="dashicons dashicons-media-text" aria-hidden="true"></span>'
-            . '<span class="wrd-notes-popover">%2$s</span>'
             . '</span>',
             esc_attr__('View note', 'woocommerce-us-duties'),
-            nl2br(esc_html($notes))
+            esc_attr($notes)
         );
     }
 

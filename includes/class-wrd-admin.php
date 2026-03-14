@@ -64,6 +64,7 @@ class WRD_Admin {
         add_action('wp_ajax_wrd_reconcile_assign', [$this, 'ajax_reconcile_assign']);
         add_action('wp_ajax_wrd_reconcile_assign_bulk', [$this, 'ajax_reconcile_assign_bulk']);
         add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
+        add_action('wp_ajax_wrd_reconcile_preview', [$this, 'ajax_reconcile_preview']);
         add_action('wp_ajax_wrd_quick_assign_profile', [$this, 'ajax_quick_assign_profile']);
         add_action('wp_ajax_wrd_update_profile_description', [$this, 'ajax_update_profile_description']);
         add_action('admin_footer', [$this, 'render_inline_assign_template']);
@@ -610,27 +611,50 @@ class WRD_Admin {
             }
             #wrd-profiles-form .wrd-description-cell {
                 min-width: 360px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            #wrd-profiles-form .wrd-description-editor {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                min-width: 0;
             }
             #wrd-profiles-form .wrd-description-input {
                 display: block;
                 width: 100%;
-                min-height: 70px;
-                resize: vertical;
-                line-height: 1.45;
+                min-width: 0;
+                min-height: 30px;
+                margin: 0;
+                line-height: 1.4;
             }
             #wrd-profiles-form .wrd-description-actions {
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                min-height: 26px;
-                margin-top: 6px;
+                flex: 0 0 auto;
             }
-            #wrd-profiles-form .wrd-description-reset.is-hidden {
+            #wrd-profiles-form .wrd-description-actions.is-hidden {
                 display: none;
+            }
+            #wrd-profiles-form .wrd-description-actions .button {
+                min-width: 30px;
+                width: 30px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            #wrd-profiles-form .wrd-description-actions .dashicons {
+                width: 16px;
+                height: 16px;
+                font-size: 16px;
             }
             #wrd-profiles-form .wrd-description-status {
                 font-size: 11px;
                 color: #646970;
+                min-height: 16px;
             }
             #wrd-profiles-form .wrd-description-status.is-error {
                 color: #b32d2e;
@@ -639,42 +663,21 @@ class WRD_Admin {
                 color: #008a20;
             }
             #wrd-profiles-form .wrd-notes-indicator {
-                position: relative;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 20px;
-                height: 20px;
+                width: 22px;
+                height: 22px;
+                border: 1px solid #dcdcde;
+                border-radius: 999px;
+                background: #f6f7f7;
                 color: #50575e;
                 cursor: help;
             }
             #wrd-profiles-form .wrd-notes-indicator .dashicons {
-                width: 18px;
-                height: 18px;
-                font-size: 18px;
-            }
-            #wrd-profiles-form .wrd-notes-popover {
-                position: absolute;
-                z-index: 20;
-                left: 24px;
-                top: 50%;
-                transform: translateY(-50%);
-                display: none;
-                min-width: 220px;
-                max-width: 360px;
-                padding: 8px 10px;
-                border: 1px solid #dcdcde;
-                border-radius: 4px;
-                background: #1d2327;
-                color: #fff;
-                text-align: left;
-                line-height: 1.45;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-            }
-            #wrd-profiles-form .wrd-notes-indicator:hover .wrd-notes-popover,
-            #wrd-profiles-form .wrd-notes-indicator:focus .wrd-notes-popover,
-            #wrd-profiles-form .wrd-notes-indicator:focus-within .wrd-notes-popover {
-                display: block;
+                width: 14px;
+                height: 14px;
+                font-size: 14px;
             }
         </style>';
         echo '<form method="post" id="wrd-profiles-form" data-wrd-bulk-form="1">';
@@ -3511,6 +3514,8 @@ class WRD_Admin {
                         'bulkSaving' => __('Applying to selected rows...', 'woocommerce-us-duties'),
                         'bulkSaved' => __('Updated %d products.', 'woocommerce-us-duties'),
                         'noSelection' => __('Select at least one row first.', 'woocommerce-us-duties'),
+                        'previewLoading' => __('Loading preview...', 'woocommerce-us-duties'),
+                        'previewError' => __('Preview unavailable.', 'woocommerce-us-duties'),
                         'error' => __('Error', 'woocommerce-us-duties'),
                     ],
                 ]);
@@ -3765,6 +3770,184 @@ class WRD_Admin {
             ];
         }
         wp_send_json_success($out);
+    }
+
+    public function ajax_reconcile_preview() {
+        if (!current_user_can('manage_woocommerce')) { wp_send_json_error(['message' => 'forbidden'], 403); }
+        check_ajax_referer('wrd_reconcile_nonce', 'nonce');
+
+        $pid = isset($_POST['product_id']) ? (int) $_POST['product_id'] : 0;
+        if ($pid <= 0) {
+            wp_send_json_error(['message' => 'invalid_params'], 400);
+        }
+
+        $product = wc_get_product($pid);
+        if (!$product) {
+            wp_send_json_error(['message' => 'not_found'], 404);
+        }
+
+        $hs_code = isset($_POST['hs_code']) ? sanitize_text_field(wp_unslash($_POST['hs_code'])) : '';
+        $cc = isset($_POST['cc']) ? strtoupper(sanitize_text_field(wp_unslash($_POST['cc']))) : '';
+        $profile_id = isset($_POST['profile_id']) ? (int) $_POST['profile_id'] : 0;
+        $metal_232 = isset($_POST['metal_value_232']) ? trim(sanitize_text_field(wp_unslash($_POST['metal_value_232']))) : '';
+
+        $profile = null;
+        if ($profile_id > 0) {
+            $profile = WRD_DB::get_profile_by_id($profile_id);
+        }
+        if (!$profile && $hs_code !== '' && $cc !== '') {
+            $profile = WRD_DB::get_profile_by_hs_country($hs_code, $cc);
+        }
+
+        $settings = get_option(WRD_Settings::OPTION, []);
+        $default_channel = $settings['default_shipping_channel'] ?? 'auto';
+        $primary_channel = in_array($default_channel, ['postal', 'commercial'], true)
+            ? $default_channel
+            : WRD_Duty_Engine::decide_channel($cc !== '' ? $cc : 'US');
+
+        $channels = ['postal', 'commercial'];
+        $channel_previews = [];
+        foreach ($channels as $channel) {
+            $channel_previews[$channel] = WRD_Duty_Engine::estimate_preview_for_product($product, [
+                'qty' => 1,
+                'dest' => 'US',
+                'origin' => $cc,
+                'hs_code' => $hs_code,
+                'profile_id' => $profile_id,
+                'profile' => $profile,
+                'channel' => $channel,
+                'metal_value_232' => $metal_232,
+            ]);
+        }
+
+        wp_send_json_success([
+            'html' => $this->render_reconciliation_preview_markup($product, [
+                'hs_code' => $hs_code,
+                'cc' => $cc,
+                'profile' => $profile,
+                'profile_id' => (int) ($profile['id'] ?? $profile_id),
+                'primary_channel' => $primary_channel,
+                'previews' => $channel_previews,
+            ]),
+        ]);
+    }
+
+    private function render_reconciliation_preview_markup(WC_Product $product, array $context): string {
+        $profile = isset($context['profile']) && is_array($context['profile']) ? $context['profile'] : null;
+        $profile_id = isset($context['profile_id']) ? (int) $context['profile_id'] : 0;
+        $previews = isset($context['previews']) && is_array($context['previews']) ? $context['previews'] : [];
+        $primary_channel = isset($context['primary_channel']) ? (string) $context['primary_channel'] : 'commercial';
+        $currency = WRD_Duty_Engine::current_currency();
+        $price_store = (float) $product->get_price();
+        $price_usd = WRD_Duty_Engine::to_usd($price_store, $currency);
+
+        ob_start();
+        echo '<div class="wrd-duty-preview-card">';
+        echo '<div class="wrd-duty-preview-head">';
+        echo '<div class="wrd-duty-preview-title-wrap">';
+        echo '<strong class="wrd-duty-preview-title">' . esc_html__('Duty Preview', 'woocommerce-us-duties') . '</strong>';
+        echo '<span class="wrd-duty-preview-subtitle">' . esc_html__('US destination, quantity 1, current product price.', 'woocommerce-us-duties') . '</span>';
+        echo '</div>';
+        echo '<div class="wrd-duty-preview-badges">';
+        if ($profile) {
+            echo '<span class="wrd-duty-preview-badge">' . esc_html(sprintf(__('Rule #%d', 'woocommerce-us-duties'), $profile_id)) . '</span>';
+        } else {
+            echo '<span class="wrd-duty-preview-badge is-warning">' . esc_html__('No matched rule', 'woocommerce-us-duties') . '</span>';
+        }
+        echo '<span class="wrd-duty-preview-badge">' . esc_html(sprintf(__('Price %s', 'woocommerce-us-duties'), wp_strip_all_tags(wc_price($price_store, ['currency' => $currency])))) . '</span>';
+        echo '<span class="wrd-duty-preview-badge">' . esc_html(sprintf(__('USD basis %s', 'woocommerce-us-duties'), wp_strip_all_tags(wc_price($price_usd, ['currency' => 'USD'])))) . '</span>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="wrd-duty-preview-grid">';
+        foreach (['postal', 'commercial'] as $channel) {
+            $preview = isset($previews[$channel]) && is_array($previews[$channel]) ? $previews[$channel] : null;
+            $is_primary = $channel === $primary_channel;
+            echo '<section class="wrd-duty-preview-channel' . ($is_primary ? ' is-primary' : '') . '">';
+            echo '<header class="wrd-duty-preview-channel-head">';
+            echo '<div>';
+            echo '<strong>' . esc_html(ucfirst($channel)) . '</strong>';
+            if ($is_primary) {
+                echo '<span class="wrd-duty-preview-channel-note">' . esc_html__('Default preview', 'woocommerce-us-duties') . '</span>';
+            }
+            echo '</div>';
+            echo '</header>';
+
+            if (!$profile || !$preview || empty($preview['profile_found'])) {
+                echo '<p class="wrd-duty-preview-empty">' . esc_html__('No duty rule matched the current HS/origin values, so no duty breakdown can be previewed yet.', 'woocommerce-us-duties') . '</p>';
+                echo '</section>';
+                continue;
+            }
+
+            echo '<div class="wrd-duty-preview-summary">';
+            echo '<span><strong>' . esc_html($this->format_preview_rate($preview['rate_pct'] ?? 0)) . '</strong> ' . esc_html__('effective rate', 'woocommerce-us-duties') . '</span>';
+            echo '<span><strong>' . wp_kses_post(wc_price((float) ($preview['duty_store'] ?? 0), ['currency' => $preview['currency'] ?? $currency])) . '</strong> ' . esc_html__('customer-facing duty', 'woocommerce-us-duties') . '</span>';
+            echo '</div>';
+
+            if (!empty($preview['cusma'])) {
+                echo '<p class="wrd-duty-preview-flag is-good">' . esc_html__('CUSMA applied for US destination. Eligible duty components are suppressed in this preview.', 'woocommerce-us-duties') . '</p>';
+            } elseif (!empty($preview['missing_232_basis'])) {
+                echo '<p class="wrd-duty-preview-flag is-warning">' . esc_html__('A Section 232 component is present but no metal basis value is available, so that component is not applied.', 'woocommerce-us-duties') . '</p>';
+            }
+
+            if (!empty($preview['components']) && is_array($preview['components'])) {
+                echo '<table class="wrd-duty-preview-table">';
+                echo '<thead><tr><th>' . esc_html__('Component', 'woocommerce-us-duties') . '</th><th>' . esc_html__('Basis', 'woocommerce-us-duties') . '</th><th>' . esc_html__('Rate', 'woocommerce-us-duties') . '</th><th>' . esc_html__('Duty', 'woocommerce-us-duties') . '</th></tr></thead>';
+                echo '<tbody>';
+                foreach ($preview['components'] as $component) {
+                    if (!is_array($component)) {
+                        continue;
+                    }
+                    echo '<tr>';
+                    echo '<td><strong>' . esc_html((string) ($component['label'] ?? $component['code'] ?? '')) . '</strong><span class="wrd-duty-preview-meta">' . esc_html($this->preview_component_state($component)) . '</span></td>';
+                    echo '<td>' . esc_html($this->preview_basis_label((string) ($component['basis'] ?? ''), (float) ($component['basis_value_usd'] ?? 0))) . '</td>';
+                    echo '<td>' . esc_html($this->format_preview_rate((float) ($component['rate_pct'] ?? 0))) . '</td>';
+                    echo '<td>' . wp_kses_post(wc_price((float) ($component['duty_usd'] ?? 0), ['currency' => 'USD'])) . '</td>';
+                    echo '</tr>';
+                }
+                echo '</tbody>';
+                echo '</table>';
+            } else {
+                echo '<p class="wrd-duty-preview-empty">' . esc_html__('This channel resolves to a flat rate with no explicit component breakdown.', 'woocommerce-us-duties') . '</p>';
+            }
+
+            echo '</section>';
+        }
+        echo '</div>';
+        echo '</div>';
+
+        return (string) ob_get_clean();
+    }
+
+    private function format_preview_rate($rate): string {
+        $value = is_numeric($rate) ? (float) $rate : 0.0;
+        $formatted = number_format($value, 2, '.', '');
+        $formatted = rtrim(rtrim($formatted, '0'), '.');
+        return $formatted . '%';
+    }
+
+    private function preview_basis_label(string $basis, float $basis_value_usd): string {
+        if ($basis === 'product_metal_value_usd') {
+            return sprintf(__('Metal value %s', 'woocommerce-us-duties'), wp_strip_all_tags(wc_price($basis_value_usd, ['currency' => 'USD'])));
+        }
+
+        return sprintf(__('Line value %s', 'woocommerce-us-duties'), wp_strip_all_tags(wc_price($basis_value_usd, ['currency' => 'USD'])));
+    }
+
+    private function preview_component_state(array $component): string {
+        if (!empty($component['applied'])) {
+            return __('Applied', 'woocommerce-us-duties');
+        }
+
+        $reason = isset($component['reason']) ? (string) $component['reason'] : '';
+        if ($reason === 'cusma_exempt') {
+            return __('Not applied: CUSMA', 'woocommerce-us-duties');
+        }
+        if ($reason === 'missing_product_metal_value_usd') {
+            return __('Not applied: missing 232 basis', 'woocommerce-us-duties');
+        }
+
+        return __('Not applied', 'woocommerce-us-duties');
     }
 
     public function redirect_legacy_pages(): void {
@@ -5148,6 +5331,10 @@ class WRD_Admin {
         $source_filter = isset($_GET['rsource']) ? sanitize_key($_GET['rsource']) : 'all';
         $category_filter = (isset($_GET['rcat']) && is_numeric($_GET['rcat'])) ? (string) max(0, (int) $_GET['rcat']) : 'all';
         $stock_filter = isset($_GET['rstock']) ? sanitize_key($_GET['rstock']) : 'all';
+        $per_page = isset($_GET['rpp']) ? (int) $_GET['rpp'] : 20;
+        if (!in_array($per_page, [20, 50, 100, 200], true)) {
+            $per_page = 20;
+        }
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         if (!in_array($stock_filter, ['all', 'instock', 'outofstock', 'onbackorder'], true)) {
             $stock_filter = 'all';
@@ -5157,6 +5344,7 @@ class WRD_Admin {
             'page' => 'wrd-customs',
             'tab' => 'reconcile',
             'status' => $status,
+            'rpp' => $per_page,
         ], admin_url('admin.php'));
         $table = new WRD_Reconciliation_Table($status, [
             'type' => $type_filter,
@@ -5164,6 +5352,7 @@ class WRD_Admin {
             'category' => $category_filter,
             'stock' => $stock_filter,
             'search' => $search,
+            'per_page' => $per_page,
         ]);
         $counts = $table->get_status_counts();
         $stock_options = function_exists('wc_get_stock_status_options') ? wc_get_stock_status_options() : [];
@@ -5209,6 +5398,7 @@ class WRD_Admin {
                 'rsource' => $source_filter,
                 'rcat' => $category_filter,
                 'rstock' => $stock_filter,
+                'rpp' => $per_page,
                 's' => $search,
             ], admin_url('admin.php'));
             $count = isset($counts[$key]) ? (int) $counts[$key] : 0;
@@ -5259,8 +5449,13 @@ class WRD_Admin {
             .ui-autocomplete { z-index: 100002 !important; max-height: 260px; overflow-y: auto; overflow-x: hidden; border: 1px solid #c3c4c7; background: #fff; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12); }
             .ui-menu .ui-menu-item-wrapper { padding: 8px 10px; }
             .wrd-reconcile-table .tablenav.top { margin: 0; padding: 6px 10px; border-bottom: 1px solid #dcdcde; }
-            .wrd-reconcile-table .tablenav.bottom { display: none; }
+            .wrd-reconcile-table .tablenav.bottom { display: block; }
             .wrd-reconcile-table .wp-list-table { margin-top: 0; border-top: 0; }
+            .wrd-reconcile-table .tablenav .wrd-reconcile-pagination-controls { margin: 0; }
+            .wrd-reconcile-table .wrd-reconcile-per-page-form { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+            .wrd-reconcile-table .wrd-reconcile-per-page-form select { min-width: 82px; margin: 0; }
+            .wrd-reconcile-table .wrd-reconcile-per-page-label { color: #646970; font-size: 12px; white-space: nowrap; }
+            .wrd-reconcile-table .wrd-reconcile-per-page-submit.button { height: 30px; line-height: 28px; margin: 0; }
             @media (max-width: 782px) {
                 .wrd-reconcile-utility-row { flex-wrap: wrap; padding: 8px; }
                 .wrd-reconcile-utility-row form { flex-wrap: wrap; }
@@ -5270,6 +5465,7 @@ class WRD_Admin {
                 .wrd-reconcile-inline-fields input[type="text"],
                 .wrd-reconcile-inline-fields input[type="number"] { min-width: 0; width: 100%; }
                 .wrd-reconcile-inline-actions { margin-left: 0; width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+                .wrd-reconcile-table .wrd-reconcile-per-page-form { flex-wrap: wrap; }
             }
         </style>';
 
@@ -5278,6 +5474,7 @@ class WRD_Admin {
         echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" id="wrd-reconcile-filter-form">';
         foreach (['page'=>'wrd-customs','tab'=>'reconcile'] as $k=>$v) { echo '<input type="hidden" name="' . esc_attr($k) . '" value="' . esc_attr($v) . '" />'; }
         echo '<input type="hidden" name="status" value="' . esc_attr($status) . '" />';
+        echo '<input type="hidden" name="rpp" value="' . esc_attr((string) $per_page) . '" />';
         echo '<div class="wrd-reconcile-inline-fields">';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Product', 'woocommerce-us-duties') . '</span><input type="search" name="s" id="wrd-rsearch" value="' . esc_attr($search) . '" placeholder="' . esc_attr__('Title or SKU', 'woocommerce-us-duties') . '" /></label>';
         echo '<label class="wrd-reconcile-field"><span class="wrd-reconcile-field-label">' . esc_html__('Type', 'woocommerce-us-duties') . '</span><select name="rtype" id="wrd-rtype">';

@@ -12,6 +12,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     private $records = [];
     private $status_counts = [];
     private $indexed = false;
+    private $per_page = 20;
+    private $per_page_options = [20, 50, 100, 200];
 
     public function __construct(string $status = 'needs_data', array $filters = []) {
         parent::__construct([
@@ -36,6 +38,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'stock' => $this->normalize_stock_filter($filters['stock'] ?? 'all'),
         ];
         $this->search = isset($filters['search']) ? sanitize_text_field((string) $filters['search']) : '';
+        $this->per_page = $this->normalize_per_page($filters['per_page'] ?? 20);
     }
 
     public function get_columns() {
@@ -63,7 +66,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         switch ($column_name) {
             case 'sku': return esc_html($item['sku']);
             case 'source':
-                return !empty($item['duty_rates_html']) ? $item['duty_rates_html'] : '<span class="wrd-duty-empty">&mdash;</span>';
+                return $this->render_duty_cell($item);
             case 'stock_status': return wp_kses_post($item['stock_status_html']);
             case 'status': return wp_kses_post($item['status_html']);
         }
@@ -76,13 +79,51 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         if (($item['type_key'] ?? '') === 'variation') {
             $type_marker = ' <span class="wrd-product-kind-badge" title="' . esc_attr__('Variation', 'woocommerce-us-duties') . '" aria-label="' . esc_attr__('Variation', 'woocommerce-us-duties') . '">VAR</span>';
         }
+        $post_status_badge = '';
+        if (!empty($item['post_status_label']) && ($item['post_status_key'] ?? 'publish') !== 'publish') {
+            $post_status_badge = ' <span class="wrd-product-post-status-badge wrd-product-post-status-badge-' . esc_attr((string) $item['post_status_key']) . '">' . esc_html((string) $item['post_status_label']) . '</span>';
+        }
 
         return sprintf(
-            '<strong><a href="%s">%s</a></strong>%s',
+            '<strong><a href="%s">%s</a></strong>%s%s',
             esc_url($editUrl),
             esc_html($item['title']),
-            $type_marker
+            $type_marker,
+            $post_status_badge
         );
+    }
+
+    public function single_row($item) {
+        $classes = ['wrd-reconcile-row'];
+        if (!empty($item['post_status_key']) && $item['post_status_key'] !== 'publish') {
+            $classes[] = 'wrd-reconcile-row-status-' . sanitize_html_class((string) $item['post_status_key']);
+        }
+        echo '<tr class="' . esc_attr(implode(' ', $classes)) . '">';
+        $this->single_row_columns($item);
+        echo '</tr>';
+    }
+
+    protected function extra_tablenav($which) {
+        echo '<div class="alignleft actions wrd-reconcile-pagination-controls">';
+        echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" class="wrd-reconcile-per-page-form">';
+        echo '<input type="hidden" name="page" value="wrd-customs" />';
+        echo '<input type="hidden" name="tab" value="reconcile" />';
+        echo '<input type="hidden" name="status" value="' . esc_attr($this->status) . '" />';
+        echo '<input type="hidden" name="rtype" value="' . esc_attr((string) ($this->filters['type'] ?? 'all')) . '" />';
+        echo '<input type="hidden" name="rsource" value="' . esc_attr((string) ($this->filters['source'] ?? 'all')) . '" />';
+        echo '<input type="hidden" name="rcat" value="' . esc_attr((string) ($this->filters['category'] ?? 'all')) . '" />';
+        echo '<input type="hidden" name="rstock" value="' . esc_attr((string) ($this->filters['stock'] ?? 'all')) . '" />';
+        echo '<input type="hidden" name="s" value="' . esc_attr($this->search) . '" />';
+        echo '<label for="wrd-reconcile-rpp-' . esc_attr($which) . '" class="screen-reader-text">' . esc_html__('Items per page', 'woocommerce-us-duties') . '</label>';
+        echo '<select id="wrd-reconcile-rpp-' . esc_attr($which) . '" name="rpp">';
+        foreach ($this->per_page_options as $option) {
+            printf('<option value="%d" %s>%d</option>', (int) $option, selected($this->per_page, $option, false), (int) $option);
+        }
+        echo '</select>';
+        echo '<span class="wrd-reconcile-per-page-label">' . esc_html__('items per page', 'woocommerce-us-duties') . '</span>';
+        submit_button(__('Apply', 'woocommerce-us-duties'), 'secondary', '', false, ['class' => 'button wrd-reconcile-per-page-submit']);
+        echo '</form>';
+        echo '</div>';
     }
 
     private function render_status_badge(string $label, string $tone = 'neutral', string $help = ''): string {
@@ -137,21 +178,20 @@ class WRD_Reconciliation_Table extends WP_List_Table {
     public function prepare_items() {
         $this->ensure_indexed();
 
-        $per_page = 20;
         $current_page = $this->get_pagenum();
-        $offset = ($current_page - 1) * $per_page;
+        $offset = ($current_page - 1) * $this->per_page;
 
         $items = array_values(array_filter($this->records, function (array $record): bool {
             return $this->matches_status_filter($record['status_key']);
         }));
 
         $total = count($items);
-        $this->items = array_slice($items, $offset, $per_page);
+        $this->items = array_slice($items, $offset, $this->per_page);
         $this->_column_headers = [$this->get_columns(), [], [], 'title'];
         $this->set_pagination_args([
             'total_items' => $total,
-            'per_page' => $per_page,
-            'total_pages' => (int) ceil($total / $per_page),
+            'per_page' => $this->per_page,
+            'total_pages' => (int) ceil($total / $this->per_page),
         ]);
     }
 
@@ -226,6 +266,14 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         $missing_origin = ($origin === '');
         $type_key = $product->is_type('variation') ? 'variation' : 'product';
         $type_label = $type_key === 'variation' ? 'Variation' : 'Product';
+        $post_status_key = sanitize_key((string) $product->get_status());
+        $post_status_label = '';
+        if ($post_status_key !== '' && $post_status_key !== 'publish') {
+            $post_status_obj = get_post_status_object($post_status_key);
+            $post_status_label = $post_status_obj && !empty($post_status_obj->label)
+                ? (string) $post_status_obj->label
+                : ucfirst($post_status_key);
+        }
 
         $source = $this->resolve_source_bucket($product, $effective);
         $source_labels = [
@@ -341,6 +389,8 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             'sku' => (string) $product->get_sku(),
             'type' => $type_label,
             'type_key' => $type_key,
+            'post_status_key' => $post_status_key,
+            'post_status_label' => $post_status_label,
             'source_key' => $source,
             'source_label' => $source_label,
             'duty_rates_html' => $duty_rates_html,
@@ -530,6 +580,11 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         return in_array($stock_filter, ['all', 'instock', 'outofstock', 'onbackorder'], true) ? $stock_filter : 'all';
     }
 
+    private function normalize_per_page($per_page): int {
+        $per_page = (int) $per_page;
+        return in_array($per_page, $this->per_page_options, true) ? $per_page : 20;
+    }
+
     private function normalize_stock_status(string $stock_status): string {
         $stock_status = sanitize_key($stock_status);
         return in_array($stock_status, ['instock', 'outofstock', 'onbackorder'], true) ? $stock_status : 'unknown';
@@ -584,6 +639,21 @@ class WRD_Reconciliation_Table extends WP_List_Table {
         return '<div class="wrd-source-meta" title="' . esc_attr__('Matched duty rates', 'woocommerce-us-duties') . '">'
             . '<span class="wrd-duty-rate"><span class="wrd-duty-rate-label">P</span><span class="wrd-duty-rate-value">' . esc_html($this->format_duty_rate($postal_rate)) . '</span></span>'
             . '<span class="wrd-duty-rate"><span class="wrd-duty-rate-label">C</span><span class="wrd-duty-rate-value">' . esc_html($this->format_duty_rate($commercial_rate)) . '</span></span>'
+            . '</div>';
+    }
+
+    private function render_duty_cell(array $item): string {
+        $product_id = (int) ($item['id'] ?? 0);
+        $rates_html = !empty($item['duty_rates_html']) ? (string) $item['duty_rates_html'] : '<span class="wrd-duty-empty">&mdash;</span>';
+
+        return '<div class="wrd-duty-cell">'
+            . '<div class="wrd-duty-cell-summary">' . $rates_html . '</div>'
+            . '<button type="button" class="button-link wrd-duty-preview-toggle" data-product="' . esc_attr((string) $product_id) . '" aria-expanded="false">'
+            . esc_html__('Preview', 'woocommerce-us-duties')
+            . '</button>'
+            . '<div class="wrd-duty-preview-popover is-hidden" data-product="' . esc_attr((string) $product_id) . '">'
+            . '<div class="wrd-duty-preview-content"></div>'
+            . '</div>'
             . '</div>';
     }
 

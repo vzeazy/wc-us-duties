@@ -15,8 +15,9 @@
     var current = $input.val();
     var initial = String($input.data('initial') || '');
     var changed = current !== initial;
+    $cell.toggleClass('is-dirty', changed);
     $cell.find('.wrd-description-save').prop('disabled', !changed);
-    $cell.find('.wrd-description-reset').toggleClass('is-hidden', !changed);
+    $cell.find('.wrd-description-actions').toggleClass('is-hidden', !changed);
     if (!changed) {
       setStatus($cell, '', '');
     }
@@ -80,7 +81,7 @@
     });
 
     $(document).on('keydown', '.wrd-description-input', function(event){
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter'){
+      if (event.key === 'Enter'){
         event.preventDefault();
         saveDescription($(this).closest('.wrd-description-cell'));
       }

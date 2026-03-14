@@ -167,6 +167,71 @@
     $('#wrd-reconcile-bulk-rule-field').toggleClass('is-hidden', action !== 'copy_rule');
   }
 
+  function closeDutyPreview($row){
+    if (!$row || !$row.length){
+      return;
+    }
+    $row.find('.wrd-duty-preview-popover').addClass('is-hidden');
+    $row.find('.wrd-duty-preview-toggle').attr('aria-expanded', 'false');
+  }
+
+  function closeAllDutyPreviews(){
+    $('tr').each(function(){
+      closeDutyPreview($(this));
+    });
+  }
+
+  function renderDutyPreviewState($popover, className, message){
+    $popover.find('.wrd-duty-preview-content').html('<p class="' + className + '">' + $('<div>').text(message || '').html() + '</p>');
+  }
+
+  function loadDutyPreview($row){
+    var values = getRowValues(parseInt($row.find('.wrd-apply').data('product'), 10) || 0);
+    var productId = parseInt($row.find('.wrd-apply').data('product'), 10) || 0;
+    var $popover = $row.find('.wrd-duty-preview-popover');
+    if (!$popover.length || productId <= 0){
+      return;
+    }
+
+    renderDutyPreviewState($popover, 'wrd-duty-preview-loading', WRDReconcile.i18n.previewLoading);
+
+    $.post(WRDReconcile.ajax, {
+      action: 'wrd_reconcile_preview',
+      nonce: WRDReconcile.nonce,
+      product_id: productId,
+      hs_code: values.hs,
+      cc: values.cc,
+      profile_id: values.profileId,
+      metal_value_232: values.metal
+    }).done(function(resp){
+      if (resp && resp.success && resp.data && resp.data.html) {
+        $popover.find('.wrd-duty-preview-content').html(resp.data.html);
+      } else {
+        renderDutyPreviewState($popover, 'wrd-duty-preview-error', WRDReconcile.i18n.previewError);
+      }
+    }).fail(function(){
+      renderDutyPreviewState($popover, 'wrd-duty-preview-error', WRDReconcile.i18n.previewError);
+    });
+  }
+
+  function toggleDutyPreview($row){
+    var $popover = $row.find('.wrd-duty-preview-popover');
+    var $button = $row.find('.wrd-duty-preview-toggle');
+    if (!$popover.length || !$button.length){
+      return;
+    }
+
+    var isOpen = !$popover.hasClass('is-hidden');
+    closeAllDutyPreviews();
+    if (isOpen){
+      return;
+    }
+
+    $popover.removeClass('is-hidden');
+    $button.attr('aria-expanded', 'true');
+    loadDutyPreview($row);
+  }
+
   function closeRowRuleLookup($row){
     if (!$row || !$row.length){
       return;
@@ -221,6 +286,7 @@
             $input.val(item.label || item.value || '');
           } else {
             var $row = $input.closest('tr');
+            closeDutyPreview($row);
             $row.find('input.wrd-hs').val(item.hs || '');
             $row.find('input.wrd-cc').val(normalizeCountryCode(item.cc || ''));
             setRowRuleSelection($row, item);
@@ -268,6 +334,7 @@
     }).done(function(resp){
       if (resp && resp.success){
         var data = resp.data || {};
+        closeDutyPreview($row);
         $row.find('input.wrd-hs').val(data.hs_code || values.hs);
         $row.find('input.wrd-cc').val(data.cc || values.cc);
         $row.find('input.wrd-selected-profile-id').val(String(parseInt(data.profile_id, 10) || 0));
@@ -393,6 +460,11 @@
       }
     });
 
+    $(document).on('click', '.wrd-duty-preview-toggle', function(event){
+      event.preventDefault();
+      toggleDutyPreview($(this).closest('tr'));
+    });
+
     $(document).on('keydown', '.column-hs_code input.wrd-hs, .column-origin input.wrd-cc, .column-metal_232 input.wrd-232-metal', function(event){
       if (event.key === 'Enter'){
         event.preventDefault();
@@ -407,6 +479,7 @@
       var $input = $(this);
       $input.val(normalizeCountryCode($input.val()));
       if ($input.hasClass('wrd-cc')){
+        closeDutyPreview($input.closest('tr'));
         clearRowRuleSelection($input.closest('tr'));
         syncRowApplyState($input.closest('tr'));
       } else {
@@ -415,6 +488,7 @@
     });
 
     $(document).on('input', '.column-hs_code input.wrd-hs', function(){
+      closeDutyPreview($(this).closest('tr'));
       clearRowRuleSelection($(this).closest('tr'));
       syncRowApplyState($(this).closest('tr'));
     });
@@ -427,6 +501,7 @@
     });
 
     $(document).on('input', '.column-metal_232 input.wrd-232-metal', function(){
+      closeDutyPreview($(this).closest('tr'));
       syncRowApplyState($(this).closest('tr'));
     });
 
@@ -455,6 +530,9 @@
         $('tr').each(function(){
           closeRowRuleLookup($(this));
         });
+      }
+      if (!$target.closest('.wrd-duty-preview-popover, .wrd-duty-preview-toggle').length){
+        closeAllDutyPreviews();
       }
     });
 
