@@ -93,12 +93,12 @@ class WRD_Profiles_Table extends WP_List_Table {
             . '<div class="wrd-description-editor">'
             . '<input id="wrd-description-%1$d" type="text" class="wrd-description-input" value="%3$s" data-initial="%3$s" spellcheck="false" />'
             . '<div class="wrd-description-actions is-hidden">'
-            . '<button type="button" class="button button-small button-primary wrd-description-save" disabled aria-label="%5$s"><span class="dashicons dashicons-saved" aria-hidden="true"></span></button>'
-            . '<button type="button" class="button button-small wrd-description-reset" aria-label="%6$s"><span class="dashicons dashicons-undo" aria-hidden="true"></span></button>'
+            . '<button type="button" class="button button-small button-primary wrd-description-save" disabled aria-label="%4$s"><span class="dashicons dashicons-saved" aria-hidden="true"></span></button>'
+            . '<button type="button" class="button button-small wrd-description-reset" aria-label="%5$s"><span class="dashicons dashicons-undo" aria-hidden="true"></span></button>'
             . '</div>'
             . '</div>'
             . '<span class="wrd-description-status" aria-live="polite" role="status"></span>'
-            . '</div>%7$s',
+            . '</div>%6$s',
             (int) $item['id'],
             esc_attr__('Description', 'woocommerce-us-duties'),
             esc_attr($description),
