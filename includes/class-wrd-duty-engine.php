@@ -218,11 +218,8 @@ class WRD_Duty_Engine {
     }
 
     public static function decide_channel(string $countryCode): string {
-        $cc = strtoupper($countryCode);
-        // Basic preferences per docs
-        if ($cc === 'TW') return 'postal';
-        if ($cc === 'CN') return 'postal';
-        if ($cc === 'CA') return 'commercial';
+        // Channel cannot be inferred reliably from origin country alone.
+        // Use a neutral fallback and let shipping-method mapping/settings override it.
         return 'commercial';
     }
 

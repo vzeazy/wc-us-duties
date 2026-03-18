@@ -297,7 +297,7 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             $matched_profile = $profile_cache[$cache_key];
             $has_profile = is_array($matched_profile);
             if ($has_profile) {
-                $duty_rates_html = $this->render_duty_rates_meta($matched_profile);
+                $duty_rates_html = $this->render_duty_rates_meta($product, $matched_profile, $hs_code, $origin);
             }
         }
 
@@ -624,17 +624,30 @@ class WRD_Reconciliation_Table extends WP_List_Table {
             . '</div>';
     }
 
-    private function render_duty_rates_meta(array $profile): string {
-        $udj = $profile['us_duty_json'] ?? null;
-        if (is_string($udj)) {
-            $udj = json_decode($udj, true);
-        }
-        if (!is_array($udj) || !class_exists('WRD_Duty_Engine')) {
+    private function render_duty_rates_meta(WC_Product $product, array $profile, string $hs_code, string $origin): string {
+        if (!class_exists('WRD_Duty_Engine')) {
             return '';
         }
 
-        $postal_rate = WRD_Duty_Engine::compute_rate_percent($udj, 'postal');
-        $commercial_rate = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
+        $postal_preview = WRD_Duty_Engine::estimate_preview_for_product($product, [
+            'qty' => 1,
+            'dest' => 'US',
+            'origin' => $origin,
+            'hs_code' => $hs_code,
+            'profile' => $profile,
+            'channel' => 'postal',
+        ]);
+        $commercial_preview = WRD_Duty_Engine::estimate_preview_for_product($product, [
+            'qty' => 1,
+            'dest' => 'US',
+            'origin' => $origin,
+            'hs_code' => $hs_code,
+            'profile' => $profile,
+            'channel' => 'commercial',
+        ]);
+
+        $postal_rate = is_array($postal_preview) ? (float) ($postal_preview['rate_pct'] ?? 0.0) : 0.0;
+        $commercial_rate = is_array($commercial_preview) ? (float) ($commercial_preview['rate_pct'] ?? 0.0) : 0.0;
 
         return '<div class="wrd-source-meta" title="' . esc_attr__('Matched duty rates', 'woocommerce-us-duties') . '">'
             . '<span class="wrd-duty-rate"><span class="wrd-duty-rate-label">P</span><span class="wrd-duty-rate-value">' . esc_html($this->format_duty_rate($postal_rate)) . '</span></span>'
