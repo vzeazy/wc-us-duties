@@ -3646,18 +3646,15 @@ class WRD_Admin {
 
         // Optionally return matched profile data.
         $profile = $resolved['profile'];
-        // Return a small payload with status and maybe matched profile data
-        $ratePostal = 0.0; $rateComm = 0.0;
-        if ($profile && is_array($profile)) {
-            $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
-            if (is_array($udj)) {
-                $ratePostal = WRD_Duty_Engine::compute_rate_percent($udj, 'postal');
-                $rateComm = WRD_Duty_Engine::compute_rate_percent($udj, 'commercial');
-            }
-        }
+        $effective_rates = $this->get_effective_preview_rates_for_product(
+            $product,
+            is_array($profile) ? $profile : null,
+            (string) $resolved['hs_code'],
+            (string) $resolved['cc']
+        );
         wp_send_json_success([
-            'postal_rate' => $ratePostal,
-            'commercial_rate' => $rateComm,
+            'postal_rate' => $effective_rates['postal_rate'],
+            'commercial_rate' => $effective_rates['commercial_rate'],
             'hs_code' => (string) $resolved['hs_code'],
             'cc' => (string) $resolved['cc'],
             'profile_id' => (int) ($resolved['profile_id'] ?? 0),
@@ -3948,6 +3945,37 @@ class WRD_Admin {
         }
 
         return __('Not applied', 'woocommerce-us-duties');
+    }
+
+    private function get_effective_preview_rates_for_product(WC_Product $product, ?array $profile, string $hs_code, string $origin): array {
+        if (!class_exists('WRD_Duty_Engine')) {
+            return [
+                'postal_rate' => 0.0,
+                'commercial_rate' => 0.0,
+            ];
+        }
+
+        $postal_preview = WRD_Duty_Engine::estimate_preview_for_product($product, [
+            'qty' => 1,
+            'dest' => 'US',
+            'origin' => $origin,
+            'hs_code' => $hs_code,
+            'profile' => $profile,
+            'channel' => 'postal',
+        ]);
+        $commercial_preview = WRD_Duty_Engine::estimate_preview_for_product($product, [
+            'qty' => 1,
+            'dest' => 'US',
+            'origin' => $origin,
+            'hs_code' => $hs_code,
+            'profile' => $profile,
+            'channel' => 'commercial',
+        ]);
+
+        return [
+            'postal_rate' => is_array($postal_preview) ? (float) ($postal_preview['rate_pct'] ?? 0.0) : 0.0,
+            'commercial_rate' => is_array($commercial_preview) ? (float) ($commercial_preview['rate_pct'] ?? 0.0) : 0.0,
+        ];
     }
 
     public function redirect_legacy_pages(): void {
@@ -4879,14 +4907,14 @@ class WRD_Admin {
 
     private function export_products_csv(): void {
         if (!current_user_can('manage_woocommerce')) { return; }
-        // Stream CSV of all products and variations with HS code and postal/commercial duty rates
+        // Stream CSV of all products and variations with HS code and effective postal/commercial duty rates
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
         nocache_headers();
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename=wrd_products_duties_' . date('Ymd_His') . '.csv');
 
         $fh = fopen('php://output', 'w');
-        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, postal %, commercial %
+        // Columns: product id, parent id, type, sku, name, variation attributes, customs desc, origin, hs code, effective postal %, effective commercial %
         fputcsv($fh, ['product_id','parent_id','type','sku','name','variation','customs_description','country_of_origin','hs_code','postal_rate_pct','commercial_rate_pct']);
 
         $paged = 1;
@@ -4920,6 +4948,12 @@ class WRD_Admin {
                 $desc = trim((string)$desc);
                 $origin = strtoupper(trim((string)$origin));
 
+                $effective = WRD_Category_Settings::get_effective_hs_code($product);
+                $hs = trim((string) ($effective['hs_code'] ?? ''));
+                if ($origin === '') {
+                    $origin = strtoupper(trim((string) ($effective['origin'] ?? '')));
+                }
+
                 // Variation attributes printable
                 $variation = '';
                 if ($product->is_type('variation')) {
@@ -4935,18 +4969,27 @@ class WRD_Admin {
                     }
                 }
 
-                $hs = '';
                 $postalPct = '';
                 $commercialPct = '';
-                if ($desc !== '' && $origin !== '') {
-                    $profile = WRD_DB::get_profile($desc, $origin);
+                if ($origin !== '' && ($hs !== '' || $desc !== '')) {
+                    $profile = null;
+                    $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
+                    if ($profile_id > 0) {
+                        $profile = WRD_DB::get_profile_by_id($profile_id);
+                    }
+                    if (!$profile && $hs !== '') {
+                        $profile = WRD_DB::get_profile_by_hs_country($hs, $origin);
+                    }
+                    if (!$profile && $desc !== '') {
+                        $profile = WRD_DB::get_profile($desc, $origin);
+                    }
                     if ($profile) {
-                        $hs = (string)($profile['hs_code'] ?? '');
-                        $udj = is_array($profile['us_duty_json']) ? $profile['us_duty_json'] : json_decode((string)$profile['us_duty_json'], true);
-                        if (is_array($udj)) {
-                            $postalPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'postal'), 4);
-                            $commercialPct = round(WRD_Duty_Engine::compute_rate_percent($udj, 'commercial'), 4);
+                        if ($hs === '') {
+                            $hs = (string) ($profile['hs_code'] ?? '');
                         }
+                        $effective_rates = $this->get_effective_preview_rates_for_product($product, $profile, $hs, $origin);
+                        $postalPct = round((float) $effective_rates['postal_rate'], 4);
+                        $commercialPct = round((float) $effective_rates['commercial_rate'], 4);
                     }
                 }
 

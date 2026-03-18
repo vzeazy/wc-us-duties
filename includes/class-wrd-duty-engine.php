@@ -46,6 +46,11 @@ class WRD_Duty_Engine {
         return strpos(sanitize_key($code), '232') !== false;
     }
 
+    private static function is_general_rate_code(string $code): bool {
+        $code = sanitize_key($code);
+        return in_array($code, ['general_rate', 'base', 'duty'], true);
+    }
+
     private static function effective_cusma_country_list(array $settings): array {
         $list = array_filter(array_map('trim', explode(',', strtoupper((string)($settings['cusma_countries'] ?? 'CA,US')))));
         foreach (['CA', 'US', 'MX'] as $required) {
@@ -158,6 +163,45 @@ class WRD_Duty_Engine {
         $outComponents = [];
         $totalDuty = 0.0;
         $missing232Basis = false;
+        $metalValue = null;
+        $hasMetalBasisComponent = false;
+        foreach ($components as $component) {
+            if (!empty($component['enabled']) && (string) ($component['basis'] ?? '') === 'product_metal_value_usd') {
+                $hasMetalBasisComponent = true;
+                break;
+            }
+        }
+
+        $commercialRemainderComponents = [];
+        if (
+            $channel === 'commercial'
+            && !$isCusma
+            && $hasMetalBasisComponent
+        ) {
+            $metalValue = self::resolve_product_metal_value_usd($product, $qty);
+            if ($metalValue === null) {
+                $missing232Basis = true;
+            } else {
+                $remainderValue = max(0.0, $lineValueUsd - max(0.0, (float) $metalValue));
+                if ($remainderValue > 0.0) {
+                    $postalComponents = self::normalize_channel_components($profile['us_duty_json'] ?? [], 'postal');
+                    foreach ($postalComponents as $postalComponent) {
+                        if (empty($postalComponent['enabled'])) { continue; }
+                        if ((string) ($postalComponent['basis'] ?? '') !== 'line_value_usd') { continue; }
+                        if (self::is_general_rate_code((string) ($postalComponent['code'] ?? ''))) { continue; }
+                        $commercialRemainderComponents[] = [
+                            'code' => (string) ($postalComponent['code'] ?? ''),
+                            'label' => (string) ($postalComponent['label'] ?? $postalComponent['code'] ?? ''),
+                            'rate_pct' => (float) ($postalComponent['rate_pct'] ?? 0.0),
+                            'basis' => 'line_value_usd',
+                            'basis_value_override' => $remainderValue,
+                            'reason' => 'commercial_remainder',
+                        ];
+                    }
+                }
+            }
+        }
+
         foreach ($components as $component) {
             if (empty($component['enabled'])) { continue; }
             $code = (string)$component['code'];
@@ -182,7 +226,9 @@ class WRD_Duty_Engine {
             $applied = true;
             $reason = 'applied';
             if ($basis === 'product_metal_value_usd') {
-                $metalValue = self::resolve_product_metal_value_usd($product, $qty);
+                if ($metalValue === null) {
+                    $metalValue = self::resolve_product_metal_value_usd($product, $qty);
+                }
                 if ($metalValue === null) {
                     $applied = false;
                     $reason = 'missing_product_metal_value_usd';
@@ -205,6 +251,23 @@ class WRD_Duty_Engine {
                 'duty_usd' => $dutyUsd,
                 'applied' => $applied,
                 'reason' => $reason,
+            ];
+        }
+
+        foreach ($commercialRemainderComponents as $component) {
+            $ratePct = (float) ($component['rate_pct'] ?? 0.0);
+            $basisValue = max(0.0, (float) ($component['basis_value_override'] ?? 0.0));
+            $dutyUsd = ($ratePct / 100.0) * $basisValue;
+            $totalDuty += $dutyUsd;
+            $outComponents[] = [
+                'code' => (string) ($component['code'] ?? ''),
+                'label' => (string) ($component['label'] ?? ''),
+                'rate_pct' => $ratePct,
+                'basis' => 'line_value_usd',
+                'basis_value_usd' => $basisValue,
+                'duty_usd' => $dutyUsd,
+                'applied' => true,
+                'reason' => (string) ($component['reason'] ?? 'applied'),
             ];
         }
 

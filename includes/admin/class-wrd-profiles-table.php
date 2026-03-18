@@ -26,8 +26,8 @@ class WRD_Profiles_Table extends WP_List_Table {
             'hs_code' => __('HS', 'woocommerce-us-duties'),
             'products' => __('Products', 'woocommerce-us-duties'),
             'active' => __('Active', 'woocommerce-us-duties'),
-            'postal_rate' => __('Postal %', 'woocommerce-us-duties'),
-            'commercial_rate' => __('Commercial %', 'woocommerce-us-duties'),
+            'postal_rate' => __('Postal Config %', 'woocommerce-us-duties'),
+            'commercial_rate' => __('Commercial Config %', 'woocommerce-us-duties'),
             'notes' => __('Notes', 'woocommerce-us-duties'),
         ];
     }
@@ -473,7 +473,7 @@ class WRD_Profiles_Table extends WP_List_Table {
                 ? $wpdb->get_results($wpdb->prepare($sql, array_merge($params, [$per_page, $offset])), ARRAY_A)
                 : $wpdb->get_results($wpdb->prepare($sql, $per_page, $offset), ARRAY_A);
 
-            // Compute preview duty rates (percent) for each row
+            // Compute configured rate sums for each rule row
             foreach ($rows as &$row) {
                 $udj = [];
                 if (isset($row['us_duty_json'])) {
