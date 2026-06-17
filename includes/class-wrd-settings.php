@@ -45,6 +45,7 @@ class WRD_Settings {
             'product_hint_position' => 'under_price',
             'product_hint_note' => '',
             'duty_padding_pct' => 0,
+            'duty_padding_rules_json' => '',
         ]);
 
         if ($wrap) { echo '<div class="wrap">'; echo '<h1>' . esc_html__('Routing & Fees', 'woocommerce-us-duties') . '</h1>'; }
@@ -93,8 +94,13 @@ class WRD_Settings {
         echo '<h2>' . esc_html__('Fees & Padding', 'woocommerce-us-duties') . '</h2>';
         echo '<table class="form-table" role="presentation"><tbody>';
         echo '<tr><th><label>' . esc_html__('Postal Clearance Fee (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="postal_clearance_fee_usd" value="' . esc_attr($opt['postal_clearance_fee_usd']) . '" /></td></tr>';
+        echo '<tr><th><label>' . esc_html__('Postal Disbursement Fee', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="postal_disbursement_flat_usd" value="' . esc_attr($opt['postal_disbursement_flat_usd'] ?? 0) . '" placeholder="Flat USD" style="width:100px;" /> <input type="number" step="0.01" name="postal_disbursement_pct" value="' . esc_attr($opt['postal_disbursement_pct'] ?? 0) . '" placeholder="% of Duties" style="width:100px;" /> <p class="description">' . esc_html__('Added only if duties > 0. Charges the greater of the flat fee or percentage.', 'woocommerce-us-duties') . '</p></td></tr>';
+        
         echo '<tr><th><label>' . esc_html__('Commercial Brokerage (flat, USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="commercial_brokerage_flat_usd" value="' . esc_attr($opt['commercial_brokerage_flat_usd']) . '" /></td></tr>';
-        echo '<tr><th><label>' . esc_html__('Duty Padding (%)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="duty_padding_pct" value="' . esc_attr($opt['duty_padding_pct']) . '" /> <p class="description">' . esc_html__('A percentage to mark up the calculated duties to cover unexpected broker differences (e.g., 10 for a 10% increase).', 'woocommerce-us-duties') . '</p></td></tr>';
+        echo '<tr><th><label>' . esc_html__('Commercial Disbursement Fee', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="commercial_disbursement_flat_usd" value="' . esc_attr($opt['commercial_disbursement_flat_usd'] ?? 0) . '" placeholder="Flat USD" style="width:100px;" /> <input type="number" step="0.01" name="commercial_disbursement_pct" value="' . esc_attr($opt['commercial_disbursement_pct'] ?? 0) . '" placeholder="% of Duties" style="width:100px;" /> <p class="description">' . esc_html__('Added only if duties > 0. Charges the greater of the flat fee or percentage.', 'woocommerce-us-duties') . '</p></td></tr>';
+        
+        echo '<tr><th><label>' . esc_html__('Duty Padding (%)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="duty_padding_pct" value="' . esc_attr($opt['duty_padding_pct']) . '" /> <p class="description">' . esc_html__('A fallback/default percentage to mark up the calculated duties to cover unexpected broker differences.', 'woocommerce-us-duties') . '</p></td></tr>';
+        echo '<tr><th><label>' . esc_html__('Duty Padding Rules (JSON)', 'woocommerce-us-duties') . '</label></th><td><textarea name="duty_padding_rules_json" rows="6" class="large-text code">' . esc_textarea($opt['duty_padding_rules_json'] ?? '') . '</textarea><p class="description">' . esc_html__('Advanced rules for padding. Format: [{"hs_prefix": "61", "country": "CN", "padding_pct": 10}]. Highest specificity wins (country match + longest HS prefix). Rules here override the global padding above.', 'woocommerce-us-duties') . '</p></td></tr>';
         echo '</tbody></table>';
 
         echo '<h2>' . esc_html__('FX', 'woocommerce-us-duties') . '</h2>';
@@ -187,8 +193,13 @@ class WRD_Settings {
             'postal_informal_threshold_usd' => (float) ($src['postal_informal_threshold_usd'] ?? 2500),
             'preferred_duty_source' => in_array(($src['preferred_duty_source'] ?? 'zonos_first'), ['zonos_first','stallion_first','lowest_rate','newest_data'], true) ? $src['preferred_duty_source'] : 'zonos_first',
             'postal_clearance_fee_usd' => (float) ($src['postal_clearance_fee_usd'] ?? 0),
+            'postal_disbursement_flat_usd' => (float) ($src['postal_disbursement_flat_usd'] ?? 0),
+            'postal_disbursement_pct' => (float) ($src['postal_disbursement_pct'] ?? 0),
             'commercial_brokerage_flat_usd' => (float) ($src['commercial_brokerage_flat_usd'] ?? 0),
+            'commercial_disbursement_flat_usd' => (float) ($src['commercial_disbursement_flat_usd'] ?? 0),
+            'commercial_disbursement_pct' => (float) ($src['commercial_disbursement_pct'] ?? 0),
             'duty_padding_pct' => (float) ($src['duty_padding_pct'] ?? 0),
+            'duty_padding_rules_json' => trim((string)($src['duty_padding_rules_json'] ?? '')),
             'fx_enabled' => !empty($src['fx_enabled']) ? 1 : 0,
             'fx_provider' => sanitize_text_field($src['fx_provider'] ?? 'exchangerate_host'),
             'fx_refresh_hours' => max(1, (int)($src['fx_refresh_hours'] ?? 12)),

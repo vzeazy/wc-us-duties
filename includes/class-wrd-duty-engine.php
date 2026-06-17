@@ -147,6 +147,45 @@ class WRD_Duty_Engine {
         return $components;
     }
 
+    public static function get_duty_padding_pct(\WC_Product $product): float {
+        $settings = get_option(WRD_Settings::OPTION, []);
+        $paddingPct = (float)($settings['duty_padding_pct'] ?? 0);
+
+        $rules_json = trim((string)($settings['duty_padding_rules_json'] ?? ''));
+        if ($rules_json !== '') {
+            $effective = WRD_Category_Settings::get_effective_hs_code($product);
+            $hs_code = (string)($effective['hs_code'] ?? '');
+            $origin = strtoupper((string)($effective['origin'] ?? ''));
+
+            $rules = json_decode($rules_json, true);
+            if (is_array($rules)) {
+                $best_score = -1;
+                $best_padding = null;
+                
+                foreach ($rules as $rule) {
+                    $r_hs = (string)($rule['hs_prefix'] ?? '');
+                    $r_country = strtoupper((string)($rule['country'] ?? ''));
+                    $r_pad = isset($rule['padding_pct']) ? (float)$rule['padding_pct'] : null;
+                    if ($r_pad === null) { continue; }
+                    
+                    if ($r_hs !== '' && strpos($hs_code, $r_hs) !== 0) { continue; }
+                    if ($r_country !== '' && $r_country !== $origin) { continue; }
+                    
+                    $score = strlen($r_hs) * 10 + ($r_country !== '' ? 100 : 0);
+                    if ($score > $best_score) {
+                        $best_score = $score;
+                        $best_padding = $r_pad;
+                    }
+                }
+                
+                if ($best_padding !== null) {
+                    $paddingPct = $best_padding;
+                }
+            }
+        }
+        return $paddingPct;
+    }
+
     private static function compute_line_duty_breakdown(\WC_Product $product, array $profile, string $channel, float $lineValueUsd, float $qty, bool $isCusma): array {
         $components = self::normalize_channel_components($profile['us_duty_json'] ?? [], $channel);
         if (!$components) {
@@ -154,8 +193,7 @@ class WRD_Duty_Engine {
             if ($isCusma) { $ratePct = 0.0; }
             $totalDutyUsd = ($ratePct / 100.0) * $lineValueUsd;
             
-            $settings = get_option(WRD_Settings::OPTION, []);
-            $paddingPct = (float)($settings['duty_padding_pct'] ?? 0);
+            $paddingPct = self::get_duty_padding_pct($product);
             if ($paddingPct > 0) {
                 $multiplier = 1.0 + ($paddingPct / 100.0);
                 $ratePct *= $multiplier;
@@ -281,8 +319,7 @@ class WRD_Duty_Engine {
             ];
         }
 
-        $settings = get_option(WRD_Settings::OPTION, []);
-        $paddingPct = (float)($settings['duty_padding_pct'] ?? 0);
+        $paddingPct = self::get_duty_padding_pct($product);
         if ($paddingPct > 0) {
             $multiplier = 1.0 + ($paddingPct / 100.0);
             $totalDuty *= $multiplier;
@@ -496,10 +533,22 @@ class WRD_Duty_Engine {
         if (!empty($channelsUsed['commercial'])) {
             $fee = (float)($settings['commercial_brokerage_flat_usd'] ?? 0);
             if ($fee > 0) { $feesUsd += $fee; $fees[] = ['label' => 'Commercial brokerage', 'channel' => 'commercial', 'amount_usd' => $fee]; }
+            if ($totalUsd > 0.005) {
+                $flat = (float)($settings['commercial_disbursement_flat_usd'] ?? 0);
+                $pct = (float)($settings['commercial_disbursement_pct'] ?? 0);
+                $disb = max($flat, ($pct / 100.0) * $totalUsd);
+                if ($disb > 0) { $feesUsd += $disb; $fees[] = ['label' => 'Commercial disbursement fee', 'channel' => 'commercial', 'amount_usd' => $disb]; }
+            }
         }
         if (!empty($channelsUsed['postal'])) {
             $fee = (float)($settings['postal_clearance_fee_usd'] ?? 0);
             if ($fee > 0) { $feesUsd += $fee; $fees[] = ['label' => 'Postal clearance', 'channel' => 'postal', 'amount_usd' => $fee]; }
+            if ($totalUsd > 0.005) {
+                $flat = (float)($settings['postal_disbursement_flat_usd'] ?? 0);
+                $pct = (float)($settings['postal_disbursement_pct'] ?? 0);
+                $disb = max($flat, ($pct / 100.0) * $totalUsd);
+                if ($disb > 0) { $feesUsd += $disb; $fees[] = ['label' => 'Postal disbursement fee', 'channel' => 'postal', 'amount_usd' => $disb]; }
+            }
         }
 
         return [
@@ -631,10 +680,22 @@ class WRD_Duty_Engine {
         if (!empty($channelsUsed['commercial'])) {
             $fee = (float)($settings['commercial_brokerage_flat_usd'] ?? 0);
             if ($fee > 0) { $feesUsd += $fee; $fees[] = ['label' => 'Commercial brokerage', 'channel' => 'commercial', 'amount_usd' => $fee]; }
+            if ($totalUsd > 0.005) {
+                $flat = (float)($settings['commercial_disbursement_flat_usd'] ?? 0);
+                $pct = (float)($settings['commercial_disbursement_pct'] ?? 0);
+                $disb = max($flat, ($pct / 100.0) * $totalUsd);
+                if ($disb > 0) { $feesUsd += $disb; $fees[] = ['label' => 'Commercial disbursement fee', 'channel' => 'commercial', 'amount_usd' => $disb]; }
+            }
         }
         if (!empty($channelsUsed['postal'])) {
             $fee = (float)($settings['postal_clearance_fee_usd'] ?? 0);
             if ($fee > 0) { $feesUsd += $fee; $fees[] = ['label' => 'Postal clearance', 'channel' => 'postal', 'amount_usd' => $fee]; }
+            if ($totalUsd > 0.005) {
+                $flat = (float)($settings['postal_disbursement_flat_usd'] ?? 0);
+                $pct = (float)($settings['postal_disbursement_pct'] ?? 0);
+                $disb = max($flat, ($pct / 100.0) * $totalUsd);
+                if ($disb > 0) { $feesUsd += $disb; $fees[] = ['label' => 'Postal disbursement fee', 'channel' => 'postal', 'amount_usd' => $disb]; }
+            }
         }
 
         return [
