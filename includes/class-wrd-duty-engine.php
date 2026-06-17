@@ -152,9 +152,19 @@ class WRD_Duty_Engine {
         if (!$components) {
             $ratePct = self::compute_rate_percent($profile['us_duty_json'] ?? [], $channel);
             if ($isCusma) { $ratePct = 0.0; }
+            $totalDutyUsd = ($ratePct / 100.0) * $lineValueUsd;
+            
+            $settings = get_option(WRD_Settings::OPTION, []);
+            $paddingPct = (float)($settings['duty_padding_pct'] ?? 0);
+            if ($paddingPct > 0) {
+                $multiplier = 1.0 + ($paddingPct / 100.0);
+                $ratePct *= $multiplier;
+                $totalDutyUsd *= $multiplier;
+            }
+
             return [
                 'total_rate_pct' => $ratePct,
-                'total_duty_usd' => ($ratePct / 100.0) * $lineValueUsd,
+                'total_duty_usd' => $totalDutyUsd,
                 'components' => [],
                 'missing_232_basis' => false,
             ];
@@ -269,6 +279,18 @@ class WRD_Duty_Engine {
                 'applied' => true,
                 'reason' => (string) ($component['reason'] ?? 'applied'),
             ];
+        }
+
+        $settings = get_option(WRD_Settings::OPTION, []);
+        $paddingPct = (float)($settings['duty_padding_pct'] ?? 0);
+        if ($paddingPct > 0) {
+            $multiplier = 1.0 + ($paddingPct / 100.0);
+            $totalDuty *= $multiplier;
+            foreach ($outComponents as &$comp) {
+                $comp['duty_usd'] *= $multiplier;
+                $comp['rate_pct'] *= $multiplier;
+            }
+            unset($comp);
         }
 
         $totalRatePct = $lineValueUsd > 0 ? (($totalDuty / $lineValueUsd) * 100.0) : 0.0;
@@ -469,6 +491,141 @@ class WRD_Duty_Engine {
 
         // Per-order channel fees
         $settings = get_option(WRD_Settings::OPTION, []);
+        $feesUsd = 0.0;
+        $fees = [];
+        if (!empty($channelsUsed['commercial'])) {
+            $fee = (float)($settings['commercial_brokerage_flat_usd'] ?? 0);
+            if ($fee > 0) { $feesUsd += $fee; $fees[] = ['label' => 'Commercial brokerage', 'channel' => 'commercial', 'amount_usd' => $fee]; }
+        }
+        if (!empty($channelsUsed['postal'])) {
+            $fee = (float)($settings['postal_clearance_fee_usd'] ?? 0);
+            if ($fee > 0) { $feesUsd += $fee; $fees[] = ['label' => 'Postal clearance', 'channel' => 'postal', 'amount_usd' => $fee]; }
+        }
+
+        return [
+            'total_usd' => $totalUsd,
+            'fees_usd' => $feesUsd,
+            'fees' => $fees,
+            'lines' => $lines,
+            'composition' => $composition,
+            'scenario' => $scenario,
+            'missing_profiles' => $missingProfiles,
+        ];
+    }
+
+    public static function estimate_order_duties(\WC_Order $order): array {
+        $currency = $order->get_currency();
+        $overrideData = self::cart_channel_override();
+        $dest = strtoupper((string)$order->get_shipping_country());
+        if ($dest === '' || $dest === 'XX') {
+            $dest = strtoupper((string)$order->get_billing_country());
+        }
+        $settings = get_option(WRD_Settings::OPTION, []);
+        $cusmaEnabled = !empty($settings['cusma_auto']);
+        $cusmaList = self::effective_cusma_country_list($settings);
+
+        $lines = [];
+        $totalUsd = 0.0;
+        $missingProfiles = 0;
+        $composition = [ 'cusma_value_usd' => 0.0, 'non_cusma_value_usd' => 0.0, 'total_value_usd' => 0.0 ];
+        $channelsUsed = [];
+
+        foreach ($order->get_items() as $item_id => $item) {
+            $product = $item->get_product();
+            if (!$product) { continue; }
+            $qty = (float) $item->get_quantity();
+            $value = (float) $item->get_total(); // order line total in store currency
+            $valueUsd = self::to_usd($value, $currency);
+
+            $effective = WRD_Category_Settings::get_effective_hs_code($product);
+            $hs_code = $effective['hs_code'];
+            $origin = $effective['origin'];
+
+            $desc = $product->get_meta('_customs_description', true);
+            if ($product->is_type('variation')) {
+                $parent = wc_get_product($product->get_parent_id());
+                if ($parent && $desc === '') {
+                    $desc = $parent->get_meta('_customs_description', true) ?: $desc;
+                }
+            }
+            $desc = is_string($desc) ? trim($desc) : '';
+
+            $profile = null;
+            $profile_id = (int) $product->get_meta('_wrd_profile_id', true);
+            if ($profile_id > 0) {
+                $profile = WRD_DB::get_profile_by_id($profile_id);
+            }
+            if (!$profile && $hs_code && $origin) {
+                $profile = WRD_DB::get_profile_by_hs_country($hs_code, $origin);
+            }
+            if (!$profile && $desc && $origin) {
+                $profile = WRD_DB::get_profile($desc, $origin);
+            }
+
+            if ($profile && !$desc && isset($profile['description_raw'])) {
+                $desc = $profile['description_raw'];
+            }
+            if (!$profile) { $missingProfiles++; }
+            $channel = $overrideData ? $overrideData['channel'] : ($origin ? self::decide_channel($origin) : 'commercial');
+
+            $isCusma = false;
+            if ($dest === 'US' && $cusmaEnabled && in_array(strtoupper((string)$origin), $cusmaList, true)) {
+                $isCusma = true;
+            } elseif ($dest === 'US' && $profile && !empty($profile['fta_flags']) && is_array($profile['fta_flags'])) {
+                $isCusma = in_array('CUSMA', $profile['fta_flags'], true) && in_array(strtoupper((string)$origin), ['CA','US','MX'], true);
+            }
+
+            $breakdown = $profile
+                ? self::compute_line_duty_breakdown($product, $profile, $channel, $valueUsd, $qty, $isCusma)
+                : ['total_rate_pct' => 0.0, 'total_duty_usd' => 0.0, 'components' => [], 'missing_232_basis' => false];
+            $ratePct = (float)$breakdown['total_rate_pct'];
+            $dutyUsd = (float)$breakdown['total_duty_usd'];
+
+            $composition['total_value_usd'] += $valueUsd;
+            if ($isCusma) { $composition['cusma_value_usd'] += $valueUsd; } else { $composition['non_cusma_value_usd'] += $valueUsd; }
+
+            $debug = [
+                'dest' => $dest,
+                'cusma_enabled' => (bool)$cusmaEnabled,
+                'cusma_list' => $cusmaList,
+                'cusma_applied' => $isCusma,
+                'cusma_reason' => $isCusma ? (($dest === 'US' && in_array(strtoupper((string)$origin), $cusmaList, true)) ? 'dest_in_list' : 'fta_flag') : 'none',
+                'profile_found' => (bool)$profile,
+                'channel_source' => $overrideData ? ($overrideData['source'] ?? 'map') : 'heuristic',
+                'method_id' => $overrideData['method_id'] ?? '',
+                'method_label' => $overrideData['label'] ?? '',
+                'keyword_pattern' => $overrideData['pattern'] ?? '',
+                'rate_pct' => $ratePct,
+                'value_usd' => $valueUsd,
+                'duty_usd' => $dutyUsd,
+                'components' => $breakdown['components'],
+                'missing_232_basis' => !empty($breakdown['missing_232_basis']),
+            ];
+
+            $lines[] = [
+                'key' => $item_id,
+                'product_id' => $product->get_id(),
+                'desc' => $desc,
+                'origin' => $origin,
+                'channel' => $channel,
+                'rate_pct' => $ratePct,
+                'value_usd' => $valueUsd,
+                'duty_usd' => $dutyUsd,
+                'cusma' => $isCusma,
+                'components' => $breakdown['components'],
+                'missing_232_basis' => !empty($breakdown['missing_232_basis']),
+                'debug' => $debug,
+            ];
+            $totalUsd += $dutyUsd;
+            $channelsUsed[$channel] = true;
+        }
+
+        $scenario = 'single';
+        $mixed = ($composition['cusma_value_usd'] > 0 && $composition['non_cusma_value_usd'] > 0);
+        if ($mixed && $composition['total_value_usd'] > 800) {
+            $scenario = 'single';
+        }
+
         $feesUsd = 0.0;
         $fees = [];
         if (!empty($channelsUsed['commercial'])) {

@@ -65,6 +65,7 @@ class WRD_Admin {
         add_action('wp_ajax_wrd_reconcile_assign_bulk', [$this, 'ajax_reconcile_assign_bulk']);
         add_action('wp_ajax_wrd_reconcile_suggest', [$this, 'ajax_reconcile_suggest']);
         add_action('wp_ajax_wrd_reconcile_preview', [$this, 'ajax_reconcile_preview']);
+        add_action('wp_ajax_wrd_calculate_order_duties', [$this, 'ajax_calculate_order_duties']);
         add_action('wp_ajax_wrd_quick_assign_profile', [$this, 'ajax_quick_assign_profile']);
         add_action('wp_ajax_wrd_update_profile_description', [$this, 'ajax_update_profile_description']);
         add_action('admin_footer', [$this, 'render_inline_assign_template']);
@@ -269,6 +270,28 @@ class WRD_Admin {
         $order->update_meta_data('_wrd_duty_snapshot', wp_json_encode($estimate));
     }
 
+    public function ajax_calculate_order_duties(): void {
+        check_ajax_referer('wrd-calculate-order-duties', 'nonce');
+        
+        $order_id = (int)($_POST['order_id'] ?? 0);
+        $order = wc_get_order($order_id);
+        if (!$order) { wp_send_json_error('Invalid order ID.'); }
+
+        // Security check
+        if (!current_user_can('edit_shop_order', $order_id) && !current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $estimate = WRD_Duty_Engine::estimate_order_duties($order);
+        $estimate['currency'] = $order->get_currency();
+        $estimate['timestamp'] = time();
+
+        $order->update_meta_data('_wrd_duty_snapshot', wp_json_encode($estimate));
+        $order->save(); // HPOS support
+
+        wp_send_json_success(['message' => 'Duties calculated successfully.']);
+    }
+
     public function register_order_duty_meta_box(): void {
         $screen = wc_get_container()->get(\Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController::class)->custom_orders_table_usage_is_enabled()
             ? wc_get_page_screen_id('shop-order')
@@ -294,14 +317,51 @@ class WRD_Admin {
         }
 
         $snapshot_json = $order->get_meta('_wrd_duty_snapshot');
-        if (!$snapshot_json) {
-            echo '<p>' . esc_html__('No duty data available for this order.', 'woocommerce-us-duties') . '</p>';
-            return;
-        }
+        $snapshot = $snapshot_json ? json_decode($snapshot_json, true) : null;
+        
+        $order_id = $order->get_id();
+        $nonce = wp_create_nonce('wrd-calculate-order-duties');
+        
+        echo '<div id="wrd-duty-action-bar" style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">';
+        echo '<button type="button" class="button button-secondary" id="wrd-calculate-duties-btn" data-order-id="' . esc_attr($order_id) . '" data-nonce="' . esc_attr($nonce) . '">';
+        echo esc_html__('Calculate Duties', 'woocommerce-us-duties');
+        echo '</button>';
+        echo '<span class="spinner" id="wrd-calculate-spinner" style="float: none; margin: 0;"></span>';
+        echo '</div>';
 
-        $snapshot = json_decode($snapshot_json, true);
+        // Add script inline
+        echo '<script>
+        jQuery(document).ready(function($) {
+            $("#wrd-calculate-duties-btn").on("click", function(e) {
+                e.preventDefault();
+                var btn = $(this);
+                var spinner = $("#wrd-calculate-spinner");
+                btn.prop("disabled", true);
+                spinner.addClass("is-active");
+                
+                $.post(ajaxurl, {
+                    action: "wrd_calculate_order_duties",
+                    order_id: btn.data("order-id"),
+                    nonce: btn.data("nonce")
+                }, function(response) {
+                    if (response.success) {
+                        location.reload();
+                    } else {
+                        alert("Error: " + (response.data || "Unknown error"));
+                        btn.prop("disabled", false);
+                        spinner.removeClass("is-active");
+                    }
+                }).fail(function() {
+                    alert("A network error occurred.");
+                    btn.prop("disabled", false);
+                    spinner.removeClass("is-active");
+                });
+            });
+        });
+        </script>';
+
         if (!$snapshot || !isset($snapshot['lines'])) {
-            echo '<p>' . esc_html__('Invalid duty data format.', 'woocommerce-us-duties') . '</p>';
+            echo '<p>' . esc_html__('No duty data available for this order. Click "Calculate Duties" to compute.', 'woocommerce-us-duties') . '</p>';
             return;
         }
 

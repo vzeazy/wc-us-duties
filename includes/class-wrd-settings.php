@@ -44,6 +44,7 @@ class WRD_Settings {
             'product_hint_enabled' => 0,
             'product_hint_position' => 'under_price',
             'product_hint_note' => '',
+            'duty_padding_pct' => 0,
         ]);
 
         if ($wrap) { echo '<div class="wrap">'; echo '<h1>' . esc_html__('Routing & Fees', 'woocommerce-us-duties') . '</h1>'; }
@@ -89,10 +90,11 @@ class WRD_Settings {
         echo '</select></td></tr>';
         echo '</tbody></table>';
 
-        echo '<h2>' . esc_html__('Fees', 'woocommerce-us-duties') . '</h2>';
+        echo '<h2>' . esc_html__('Fees & Padding', 'woocommerce-us-duties') . '</h2>';
         echo '<table class="form-table" role="presentation"><tbody>';
         echo '<tr><th><label>' . esc_html__('Postal Clearance Fee (USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="postal_clearance_fee_usd" value="' . esc_attr($opt['postal_clearance_fee_usd']) . '" /></td></tr>';
         echo '<tr><th><label>' . esc_html__('Commercial Brokerage (flat, USD)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="commercial_brokerage_flat_usd" value="' . esc_attr($opt['commercial_brokerage_flat_usd']) . '" /></td></tr>';
+        echo '<tr><th><label>' . esc_html__('Duty Padding (%)', 'woocommerce-us-duties') . '</label></th><td><input type="number" step="0.01" name="duty_padding_pct" value="' . esc_attr($opt['duty_padding_pct']) . '" /> <p class="description">' . esc_html__('A percentage to mark up the calculated duties to cover unexpected broker differences (e.g., 10 for a 10% increase).', 'woocommerce-us-duties') . '</p></td></tr>';
         echo '</tbody></table>';
 
         echo '<h2>' . esc_html__('FX', 'woocommerce-us-duties') . '</h2>';
@@ -186,6 +188,7 @@ class WRD_Settings {
             'preferred_duty_source' => in_array(($src['preferred_duty_source'] ?? 'zonos_first'), ['zonos_first','stallion_first','lowest_rate','newest_data'], true) ? $src['preferred_duty_source'] : 'zonos_first',
             'postal_clearance_fee_usd' => (float) ($src['postal_clearance_fee_usd'] ?? 0),
             'commercial_brokerage_flat_usd' => (float) ($src['commercial_brokerage_flat_usd'] ?? 0),
+            'duty_padding_pct' => (float) ($src['duty_padding_pct'] ?? 0),
             'fx_enabled' => !empty($src['fx_enabled']) ? 1 : 0,
             'fx_provider' => sanitize_text_field($src['fx_provider'] ?? 'exchangerate_host'),
             'fx_refresh_hours' => max(1, (int)($src['fx_refresh_hours'] ?? 12)),
